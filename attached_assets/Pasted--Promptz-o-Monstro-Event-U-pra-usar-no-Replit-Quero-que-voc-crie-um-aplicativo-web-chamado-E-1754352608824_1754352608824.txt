@@ -1,0 +1,183 @@
+📜 Promptzão Monstro — Event-U (pra usar no Replit)
+
+Quero que você crie um aplicativo web chamado Event-U, com foco em eventos locais e mapa de calor em tempo real. O app deve ser desenvolvido em React + Vite + TailwindCSS, integrado ao Firebase e Mapbox, com suporte à Google Maps Popular Times API para previsões futuras.
+
+🔥 Funcionalidades Principais
+
+🌍 Mapa de Calor em Tempo Real
+
+Usar Mapbox GL JS para renderizar o mapa.
+
+O heatmap deve ser alimentado automaticamente pela localização do celular dos usuários (mesmo anônimos).
+
+Cada usuário ativo = 1 ponto no calor ao vivo.
+
+Mostrar gradiente de intensidade: azul → verde → amarelo → laranja → vermelho.
+
+Filtros no mapa: tipo de evento (Bar, Balada, Show, Feira, etc.) e tipo de local.
+
+🔮 Previsão de Calor Futuro
+
+Botão “Ver Previsão” no mapa.
+
+Base de cálculo:
+
+Número de check-ins confirmados nos eventos futuros.
+
+Dados de Popular Times do Google Maps para cada local.
+
+Fórmula sugerida:
+
+makefile
+Copy
+Edit
+heat_prediction_score =
+  (#confirmados × 1.0) +
+  (popular_times_google × 0.8) +
+  (tipo_evento_peso)
+Exemplos de pesos:
+
+Balada +2.0
+
+Bar com música +1.5
+
+Feira +1.0
+
+Encontro pequeno +0.5
+
+🗓️ Eventos
+
+Usuário logado pode criar eventos.
+
+Campos do evento:
+
+Título
+
+Local (via Google Places API)
+
+Data e Hora
+
+Tipo de Evento
+
+Descrição
+
+Evento aparece no mapa com ícone diferenciado por tipo.
+
+Participantes confirmam presença → impacta calor futuro.
+
+👤 Perfis
+
+Usuário Comum
+
+Pode:
+
+Ver mapa e eventos
+
+Fazer check-in
+
+Criar eventos
+
+Confirmar presença
+
+Enviar e receber mensagens com outros usuários ou organizadores
+
+Terá perfil com histórico de eventos criados e participados
+
+Dono de Estabelecimento
+
+Pode:
+
+Reivindicar local vindo do Google Maps
+
+Passar por processo de validação (email/telefone, similar ao Google Business)
+
+Criar e gerenciar eventos do seu estabelecimento
+
+Ver estatísticas do público e calor em tempo real nos seus eventos
+
+🛠️ Back-Office (Admin)
+
+Painel para moderar e validar:
+
+Novos estabelecimentos reivindicados
+
+Eventos reportados
+
+Estatísticas gerais (mapa de calor, quantidade de check-ins, etc.)
+
+Controle de usuários (banimento, bloqueio de spam)
+
+🔐 Autenticação
+
+Usar Firebase Auth (Google login).
+
+Sem login: usuário só pode ver mapa.
+
+Com login: pode criar/participar de eventos e enviar mensagens.
+
+🎨 Design
+
+Baseado em dark mode leve (tons azul, roxo e laranja para destaque).
+
+Navegação inferior fixa com 3 ícones:
+
+Mapa 🌍
+
+Eventos 📅
+
+Perfil 👤
+
+Botão flutuante: “+ Criar Evento”.
+
+Ícones coloridos por tipo de evento.
+
+📦 Estrutura do Projeto
+
+bash
+Copy
+Edit
+/src
+  App.jsx                → rotas principais
+  pages/Map.jsx          → mapa com calor ao vivo e botão de previsão
+  pages/CreateEvent.jsx  → formulário de criação
+  pages/EventDetail.jsx  → detalhes do evento
+  pages/Profile.jsx      → perfil do usuário
+  pages/BusinessClaim.jsx → fluxo de reivindicação de local
+  pages/Admin.jsx        → painel do back-office
+  components/HeatMap.jsx → componente de mapa de calor
+  components/EventCard.jsx → card de evento
+  components/Filters.jsx → filtros de tipo de evento/local
+  firebase.js            → configuração Firebase
+🔗 Banco de Dados (Firestore)
+
+users
+
+uid, nome, email, tipoPerfil, locaisReivindicados[], eventosCriados[], eventosParticipados[]
+
+events
+
+titulo, localId, dataHora, tipo, descrição, criador, confirmados[]
+
+checkins
+
+userId, localId, timestamp
+
+locations
+
+nome, endereço, coords, reputação, popular_times_google
+
+messages
+
+senderId, receiverId, texto, timestamp
+
+⚡ Deploy Local
+
+bash
+Copy
+Edit
+npx create-vite@latest event-u --template react
+cd event-u && npm install
+
+npm install firebase mapbox-gl tailwindcss react-router-dom
+
+npm run dev

@@ -1,0 +1,114 @@
+📜 Event-U Prompt for Replit (English)
+Build a web application called Event-U using React + Vite + TailwindCSS, integrated with Firebase and Mapbox.
+The app should be simple and focused, with the initial screen showing only a full-screen live heatmap.
+
+🎯 MVP Scope
+🌍 Home Screen (Live Heatmap)
+Show a full-screen interactive map using Mapbox GL JS.
+
+The heatmap must be fed automatically by users’ real-time mobile location data (even if anonymous).
+
+Each active user = 1 heat point.
+
+Gradient: blue → green → yellow → orange → red.
+
+Add a “Prediction” button (top right) to switch the map from live mode to future heatmap prediction.
+
+Add a filter bar above the map to filter by event type (Clubs, Shows, Fairs, Bars, etc.).
+
+🔮 Future Heatmap Prediction
+When the “Prediction” button is clicked, the map displays forecasted heat based on:
+
+Number of check-ins confirmed for upcoming events.
+
+Google Maps Popular Times data for the location.
+
+Suggested formula:
+
+makefile
+Copy
+Edit
+heat_prediction_score =
+  (#confirmed × 1.0) +
+  (google_popular_times × 0.8) +
+  (event_type_weight)
+Example weights: Club +2.0, Bar with live music +1.5, Fair +1.0, Small gathering +0.5.
+
+🗓️ Events
+Logged-in users can create events.
+
+Event fields: title, location (Google Places API), date, time, type, description.
+
+Events appear on the map with type-specific icons.
+
+Users can confirm attendance → counts toward future heatmap prediction.
+
+👤 Profiles
+Regular User:
+
+View map and events
+
+Do check-ins
+
+Create events
+
+Confirm attendance
+
+Have a profile with created and attended events history
+
+Send and receive basic messages between users
+
+Business Owner:
+
+Claim a location via Google Maps
+
+Verification required (phone/email, like Google Business)
+
+Create and manage events for the claimed location
+
+See stats of attendance and live heat for their events
+
+🛠️ Admin Back-Office
+Simple dashboard for:
+
+Approving claimed businesses
+
+Moderating reported events
+
+Viewing global stats (active users, check-ins, events)
+
+🔐 Authentication
+Use Firebase Auth (Google login).
+
+Not logged in → can only view the map.
+
+Logged in → can create/join events and message other users.
+
+📦 Project Structure
+bash
+Copy
+Edit
+/src
+  App.jsx
+  pages/Map.jsx
+  pages/CreateEvent.jsx
+  pages/EventDetail.jsx
+  pages/Profile.jsx
+  pages/BusinessClaim.jsx
+  pages/Admin.jsx
+  components/HeatMap.jsx
+  components/EventCard.jsx
+  components/Filters.jsx
+  firebase.js
+⚡ Tech Stack
+Frontend: React + Vite + TailwindCSS
+
+Map: Mapbox GL JS
+
+Backend: Firebase (Auth + Firestore + GeoFire)
+
+Auth: Google login via Firebase
+
+Deployment: Vercel
+
+👉 This ensures Replit AI understands the initial screen must be a live heatmap in full screen, not a mockup or decorative UI.
