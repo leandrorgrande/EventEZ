@@ -1,0 +1,138 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: hsl(240, 10%, 3.9%);
+  --foreground: hsl(0, 0%, 98%);
+  --muted: hsl(240, 3.7%, 15.9%);
+  --muted-foreground: hsl(240, 5%, 64.9%);
+  --popover: hsl(240, 10%, 3.9%);
+  --popover-foreground: hsl(0, 0%, 98%);
+  --card: hsl(240, 10%, 3.9%);
+  --card-foreground: hsl(0, 0%, 98%);
+  --border: hsl(240, 3.7%, 15.9%);
+  --input: hsl(240, 3.7%, 15.9%);
+  --primary: hsl(207, 90%, 54%);
+  --primary-foreground: hsl(211, 100%, 99%);
+  --secondary: hsl(240, 3.7%, 15.9%);
+  --secondary-foreground: hsl(0, 0%, 98%);
+  --accent: hsl(240, 3.7%, 15.9%);
+  --accent-foreground: hsl(0, 0%, 98%);
+  --destructive: hsl(0, 62.8%, 30.6%);
+  --destructive-foreground: hsl(0, 0%, 98%);
+  --ring: hsl(240, 4.9%, 83.9%);
+  --radius: 0.5rem;
+  
+  /* Event-U specific colors */
+  --heat-blue: hsl(217, 91%, 60%);
+  --heat-green: hsl(158, 64%, 52%);
+  --heat-yellow: hsl(43, 96%, 56%);
+  --heat-orange: hsl(25, 95%, 53%);
+  --heat-red: hsl(0, 84%, 60%);
+  --navy: hsl(222, 84%, 5%);
+  --slate-custom: hsl(215, 28%, 17%);
+}
+
+.dark {
+  --background: hsl(240, 10%, 3.9%);
+  --foreground: hsl(0, 0%, 98%);
+  --muted: hsl(240, 3.7%, 15.9%);
+  --muted-foreground: hsl(240, 5%, 64.9%);
+  --popover: hsl(240, 10%, 3.9%);
+  --popover-foreground: hsl(0, 0%, 98%);
+  --card: hsl(240, 10%, 3.9%);
+  --card-foreground: hsl(0, 0%, 98%);
+  --border: hsl(240, 3.7%, 15.9%);
+  --input: hsl(240, 3.7%, 15.9%);
+  --primary: hsl(207, 90%, 54%);
+  --primary-foreground: hsl(211, 100%, 99%);
+  --secondary: hsl(240, 3.7%, 15.9%);
+  --secondary-foreground: hsl(0, 0%, 98%);
+  --accent: hsl(240, 3.7%, 15.9%);
+  --accent-foreground: hsl(0, 0%, 98%);
+  --destructive: hsl(0, 62.8%, 30.6%);
+  --destructive-foreground: hsl(0, 0%, 98%);
+  --ring: hsl(240, 4.9%, 83.9%);
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+  
+  html {
+    @apply dark;
+  }
+}
+
+@layer components {
+  .filter-chip {
+    @apply px-3 py-1 text-xs font-medium rounded-full bg-gray-600 text-gray-300 hover:bg-gray-500 transition-colors whitespace-nowrap flex items-center;
+  }
+  
+  .filter-chip.active {
+    @apply bg-blue-600 text-white;
+  }
+
+  .nav-item {
+    @apply flex flex-col items-center justify-center py-1 px-3 text-gray-400 hover:text-white transition-colors;
+  }
+
+  .nav-item.active {
+    @apply text-blue-400;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 2px;
+    height: 2px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: hsl(215, 28%, 47%);
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(215, 28%, 57%);
+  }
+
+  /* Mapbox overrides */
+  .mapboxgl-canvas {
+    outline: none;
+  }
+  
+  .mapboxgl-ctrl-attrib {
+    @apply text-xs opacity-50;
+  }
+  
+  .mapboxgl-popup-content {
+    @apply bg-slate-800 text-white border border-slate-700 rounded-lg;
+  }
+  
+  .mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip {
+    border-top-color: hsl(215, 28%, 17%);
+  }
+}
+
+/* Animation utilities */
+@layer utilities {
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  .backdrop-blur-custom {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+}
