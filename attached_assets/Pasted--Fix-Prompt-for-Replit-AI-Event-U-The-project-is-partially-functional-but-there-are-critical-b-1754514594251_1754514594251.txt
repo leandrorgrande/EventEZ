@@ -1,0 +1,74 @@
+🛠️ Fix Prompt for Replit AI — Event-U
+The project is partially functional, but there are critical bugs and missing core features. Please fix the following issues based on what has already been built:
+
+🔧 1. Real-Time Map and Heatmap
+The map is not showing up. Ensure that Mapbox (or Google Maps, if you're using that) is correctly loaded and rendered.
+
+Fix the real-time heatmap, which should be based on the active user's geolocation.
+
+📍 2. Connect Events to Google Maps Establishments
+When creating an event, the user must be able to select a location using Google Places API.
+
+The selected place should be saved and linked to the event so that it appears on the map with a unique icon.
+
+Each establishment should display a card showing:
+
+Name and category
+
+List of upcoming events at that location
+
+Heat forecast for future dates/times (future heatmap)
+
+🖼️ 3. Event Media Upload
+Allow users to upload an image or video when creating an event.
+
+Store the media file (e.g., in Firebase Storage), and display it in the event card or detail view.
+
+🐞 4. Fix "Create Event" Button
+The “Create Event” button is currently broken. Fix it so that:
+
+Fields are properly validated
+
+Event data is saved to the database (Firebase/Firestore or PostgreSQL)
+
+The event list and map update after successful creation
+
+👤 5. User Profile
+In the profile view, users should be able to edit their basic info and upload a profile picture.
+
+🧭 6. Claim Business Flow
+Implement a flow for business owners to claim a venue:
+
+User selects a place from Google Maps
+
+Clicks to request ownership
+
+Enters contact info (name, phone)
+
+System sends a verification and, once approved, gives control over that location’s events
+
+🔮 7. Future Heatmap Logic
+Implement the future heatmap calculation using this logic:
+
+js
+Copy
+Edit
+heat_prediction_score =
+  (confirmed_users × 1.0) +
+  (popular_times_google × 0.8) +
+  (event_type_weight)
+Suggested event_type_weight values:
+
+Nightclub: 2.0
+
+Bar with live music: 1.5
+
+Fair: 1.0
+
+Small gathering: 0.5
+
+Display the heatmap prediction based on event RSVPs and Google Maps Popular Times API.
+
+🔒 Please keep the current visual layout. Do not add unnecessary UI mockups or visual placeholders.
+
+The main focus now is to make everything functional and properly integrated, especially with Maps, Places, Firebase, and Storage.
