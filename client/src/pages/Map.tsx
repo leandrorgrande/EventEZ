@@ -33,7 +33,12 @@ export default function Map() {
 
   // Fetch events
   const { data: events, isLoading: eventsLoading } = useQuery({
-    queryKey: ["/api/events", { eventType: currentFilter !== "all" ? currentFilter : undefined }],
+    queryKey: ["/api/events"],
+    queryFn: async () => {
+      const response = await fetch(`/api/events${currentFilter !== "all" ? `?eventType=${currentFilter}` : ""}`);
+      if (!response.ok) throw new Error('Failed to fetch events');
+      return response.json();
+    },
   });
 
   const togglePredictionMode = () => {
@@ -78,7 +83,7 @@ export default function Map() {
               body: JSON.stringify({
                 latitude: position.coords.latitude.toString(),
                 longitude: position.coords.longitude.toString(),
-                userId: user.id,
+                userId: (user as any)?.id,
                 isAnonymous: false,
               }),
             }).catch(console.error);
@@ -94,7 +99,7 @@ export default function Map() {
               body: JSON.stringify({
                 latitude: mockLat.toString(),
                 longitude: mockLng.toString(),
-                userId: user.id,
+                userId: (user as any)?.id,
                 isAnonymous: false,
               }),
             }).catch(console.error);
@@ -115,8 +120,8 @@ export default function Map() {
       {/* Map Container */}
       <div className="absolute inset-0 z-0">
         <HeatMap
-          data={isLiveMode ? liveHeatmapData : predictionHeatmapData}
-          events={events}
+          data={isLiveMode ? (liveHeatmapData as any[]) : (predictionHeatmapData as any[])}
+          events={events as any[]}
           isLoading={liveLoading || predictionLoading || eventsLoading}
           onEventSelect={setSelectedEvent}
         />

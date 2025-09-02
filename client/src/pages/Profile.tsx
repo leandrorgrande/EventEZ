@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -5,10 +6,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import BottomNavigation from "@/components/BottomNavigation";
 import { useAuth } from "@/hooks/useAuth";
-import { Settings, History, Store, LogOut, Calendar, Users } from "lucide-react";
+import EditProfileModal from "@/components/EditProfileModal";
+import BusinessClaimModal from "@/components/BusinessClaimModal";
+import { Settings, History, Store, LogOut, Calendar, Users, Edit3, Building2 } from "lucide-react";
 
 export default function Profile() {
   const { user } = useAuth();
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [businessClaimOpen, setBusinessClaimOpen] = useState(false);
 
   const { data: userEvents } = useQuery({
     queryKey: ["/api/users", user?.id, "events"],
@@ -43,7 +48,7 @@ export default function Profile() {
               {(user.firstName?.[0] || user.email?.[0] || "U").toUpperCase()}
             </AvatarFallback>
           </Avatar>
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl font-bold" data-testid="text-user-name">
               {user.firstName && user.lastName 
                 ? `${user.firstName} ${user.lastName}`
@@ -54,6 +59,16 @@ export default function Profile() {
               {user.userType === "business" ? "Business" : "Regular User"}
             </Badge>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEditProfileOpen(true)}
+            className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
+            data-testid="button-edit-profile"
+          >
+            <Edit3 className="h-4 w-4 mr-2" />
+            Edit
+          </Button>
         </div>
       </div>
 
@@ -138,9 +153,10 @@ export default function Profile() {
             <Button
               variant="ghost"
               className="w-full justify-start text-white hover:bg-slate-700/50"
+              onClick={() => setBusinessClaimOpen(true)}
               data-testid="button-claim-business"
             >
-              <Store className="mr-3 h-5 w-5 text-gray-400" />
+              <Building2 className="mr-3 h-5 w-5 text-gray-400" />
               Claim Business
             </Button>
           )}
@@ -159,6 +175,18 @@ export default function Profile() {
 
       {/* Bottom Navigation */}
       <BottomNavigation currentPage="profile" />
+
+      {/* Modals */}
+      <EditProfileModal
+        open={editProfileOpen}
+        onOpenChange={setEditProfileOpen}
+        user={user}
+      />
+
+      <BusinessClaimModal
+        open={businessClaimOpen}
+        onOpenChange={setBusinessClaimOpen}
+      />
     </div>
   );
 }

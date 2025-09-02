@@ -6,6 +6,7 @@ import {
   checkins,
   messages,
   heatmapData,
+  businessClaims,
   type User,
   type UpsertUser,
   type InsertLocation,
@@ -20,6 +21,8 @@ import {
   type Message,
   type InsertHeatmapData,
   type HeatmapData,
+  type InsertBusinessClaim,
+  type BusinessClaim,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql } from "drizzle-orm";
@@ -61,6 +64,11 @@ export interface IStorage {
   getLiveHeatmapData(): Promise<HeatmapData[]>;
   getPredictionHeatmapData(): Promise<HeatmapData[]>;
   updateHeatmapIntensity(latitude: number, longitude: number, intensity: number): Promise<void>;
+  
+  // Business claim operations
+  createBusinessClaim(claim: InsertBusinessClaim): Promise<BusinessClaim>;
+  getBusinessClaims(status?: string): Promise<BusinessClaim[]>;
+  updateBusinessClaimStatus(id: string, status: string): Promise<BusinessClaim | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -229,6 +237,29 @@ export class DatabaseStorage implements IStorage {
       intensity,
       isLive: true,
     });
+  }
+
+  // Business claim operations
+  async createBusinessClaim(claim: InsertBusinessClaim): Promise<BusinessClaim> {
+    const [newClaim] = await db.insert(businessClaims).values(claim).returning();
+    return newClaim;
+  }
+
+  async getBusinessClaims(status?: string): Promise<BusinessClaim[]> {
+    let query = db.select().from(businessClaims);
+    if (status) {
+      query = query.where(eq(businessClaims.status, status));
+    }
+    return await query.orderBy(desc(businessClaims.createdAt));
+  }
+
+  async updateBusinessClaimStatus(id: string, status: string): Promise<BusinessClaim | undefined> {
+    const [updatedClaim] = await db
+      .update(businessClaims)
+      .set({ status })
+      .where(eq(businessClaims.id, id))
+      .returning();
+    return updatedClaim;
   }
 }
 

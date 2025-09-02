@@ -7,7 +7,8 @@ import {
   insertLocationSchema, 
   insertMessageSchema,
   insertCheckinSchema,
-  insertHeatmapDataSchema 
+  insertHeatmapDataSchema,
+  insertBusinessClaimSchema 
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -220,11 +221,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/heatmap/prediction', async (req, res) => {
     try {
-      const heatmapData = await storage.getPredictionHeatmapData();
-      res.json(heatmapData);
+      // Get upcoming events for prediction calculation
+      const upcomingEvents = await storage.getEvents({ isActive: true });
+      const currentTime = new Date();
+      
+      const predictionData = [];
+      
+      for (const event of upcomingEvents) {
+        if (new Date(event.startDateTime) > currentTime) {
+          // Get event attendees count
+          const attendees = await storage.getEventAttendees(event.id);
+          const confirmedCount = attendees.filter(a => a.status === 'confirmed').length;
+          
+          // Get location for coordinates
+          const location = await storage.getLocationById(event.locationId);
+          if (location) {
+            // Calculate prediction score based on the specified formula
+            const eventTypeWeights = {
+              clubs: 2.0,
+              bars: 1.5,
+              shows: 1.0,
+              fairs: 1.0,
+              food: 0.5,
+              other: 0.5
+            };
+            
+            const eventWeight = eventTypeWeights[event.eventType as keyof typeof eventTypeWeights] || 0.5;
+            const popularTimesScore = 0.6; // Mock popular times score
+            
+            const predictionScore = (confirmedCount * 1.0) + (popularTimesScore * 0.8) + eventWeight;
+            const intensity = Math.min(predictionScore / 10, 1.0); // Normalize to 0-1
+            
+            predictionData.push({
+              id: `prediction_${event.id}`,
+              latitude: location.latitude,
+              longitude: location.longitude,
+              intensity,
+              eventType: event.eventType,
+              isLive: false,
+              timestamp: new Date(),
+            });
+          }
+        }
+      }
+      
+      res.json(predictionData);
     } catch (error) {
-      console.error("Error fetching prediction heatmap data:", error);
-      res.status(500).json({ message: "Failed to fetch prediction heatmap data" });
+      console.error("Error calculating prediction heatmap data:", error);
+      res.status(500).json({ message: "Failed to calculate prediction heatmap data" });
     }
   });
 
@@ -247,6 +291,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user events:", error);
       res.status(500).json({ message: "Failed to fetch user events" });
+    }
+  });
+
+  // Business claim routes
+  app.post('/api/business-claims', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const claimData = insertBusinessClaimSchema.parse({
+        ...req.body,
+        userId,
+      });
+      const claim = await storage.createBusinessClaim(claimData);
+      res.json(claim);
+    } catch (error) {
+      console.error("Error creating business claim:", error);
+      res.status(400).json({ message: "Failed to create business claim" });
+    }
+  });
+
+  app.get('/api/business-claims', isAuthenticated, async (req: any, res) => {
+    try {
+      const userType = req.user.claims.user_type || "regular";
+      
+      if (userType === "admin") {
+        // Admins can see all claims
+        const status = req.query.status as string;
+        const claims = await storage.getBusinessClaims(status);
+        res.json(claims);
+      } else {
+        // Regular users can only see their own claims
+        const userId = req.user.claims.sub;
+        const allClaims = await storage.getBusinessClaims();
+        const userClaims = allClaims.filter(claim => claim.userId === userId);
+        res.json(userClaims);
+      }
+    } catch (error) {
+      console.error("Error fetching business claims:", error);
+      res.status(500).json({ message: "Failed to fetch business claims" });
+    }
+  });
+
+  app.patch('/api/business-claims/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userType = req.user.claims.user_type || "regular";
+      
+      if (userType !== "admin") {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      
+      const { status } = req.body;
+      const claim = await storage.updateBusinessClaimStatus(req.params.id, status);
+      
+      if (!claim) {
+        return res.status(404).json({ message: "Business claim not found" });
+      }
+      
+      res.json(claim);
+    } catch (error) {
+      console.error("Error updating business claim:", error);
+      res.status(400).json({ message: "Failed to update business claim" });
     }
   });
 

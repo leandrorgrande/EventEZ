@@ -36,6 +36,8 @@ export const users = pgTable("users", {
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
   userType: varchar("user_type").default("regular"), // regular, business, admin
+  phone: varchar("phone"),
+  bio: text("bio"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -47,8 +49,10 @@ export const locations = pgTable("locations", {
   latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
   longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
   googlePlaceId: varchar("google_place_id"),
+  category: varchar("category"), // restaurant, bar, club, venue, etc.
   businessOwnerId: varchar("business_owner_id").references(() => users.id),
   verified: boolean("verified").default(false),
+  popularTimes: jsonb("popular_times"), // Google Places popular times data
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -61,6 +65,8 @@ export const events = pgTable("events", {
   eventType: varchar("event_type").notNull(), // clubs, bars, shows, fairs, food, other
   startDateTime: timestamp("start_date_time").notNull(),
   endDateTime: timestamp("end_date_time"),
+  mediaUrl: varchar("media_url"), // URL for uploaded images/videos
+  mediaType: varchar("media_type"), // image or video
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -101,6 +107,16 @@ export const heatmapData = pgTable("heatmap_data", {
   eventType: varchar("event_type"),
   isLive: boolean("is_live").default(true),
   timestamp: timestamp("timestamp").defaultNow(),
+});
+
+export const businessClaims = pgTable("business_claims", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  locationId: varchar("location_id").references(() => locations.id).notNull(),
+  contactPhone: varchar("contact_phone").notNull(),
+  contactName: varchar("contact_name").notNull(),
+  status: varchar("status").default("pending"), // pending, approved, rejected
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Relations
@@ -206,6 +222,23 @@ export const insertHeatmapDataSchema = createInsertSchema(heatmapData).omit({
   timestamp: true,
 });
 
+export const insertBusinessClaimSchema = createInsertSchema(businessClaims).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Relations for business claims
+export const businessClaimsRelations = relations(businessClaims, ({ one }) => ({
+  user: one(users, {
+    fields: [businessClaims.userId],
+    references: [users.id],
+  }),
+  location: one(locations, {
+    fields: [businessClaims.locationId],
+    references: [locations.id],
+  }),
+}));
+
 // Types
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
@@ -221,3 +254,5 @@ export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Message = typeof messages.$inferSelect;
 export type InsertHeatmapData = z.infer<typeof insertHeatmapDataSchema>;
 export type HeatmapData = typeof heatmapData.$inferSelect;
+export type InsertBusinessClaim = z.infer<typeof insertBusinessClaimSchema>;
+export type BusinessClaim = typeof businessClaims.$inferSelect;

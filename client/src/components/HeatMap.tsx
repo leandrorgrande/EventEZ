@@ -43,10 +43,10 @@ export default function HeatMap({ data, events, isLoading, onEventSelect }: Heat
     // Use environment variable for Mapbox token or fallback
     const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN || "pk.example_token";
     
-    if (typeof window.mapboxgl !== "undefined") {
-      window.mapboxgl.accessToken = mapboxToken;
+    if (typeof (window as any).mapboxgl !== "undefined") {
+      (window as any).mapboxgl.accessToken = mapboxToken;
       
-      mapRef.current = new window.mapboxgl.Map({
+      mapRef.current = new (window as any).mapboxgl.Map({
         container: mapContainerRef.current,
         style: "mapbox://styles/mapbox/dark-v10",
         center: [-73.985, 40.748], // NYC
@@ -138,7 +138,7 @@ export default function HeatMap({ data, events, isLoading, onEventSelect }: Heat
   const addHeatmapLayer = () => {
     if (!mapRef.current) return;
 
-    const heatmapData = generateHeatmapGeoJSON(data);
+    const heatmapData = generateHeatmapGeoJSON(data || []);
 
     if (mapRef.current.getSource("heatmap-data")) {
       mapRef.current.getSource("heatmap-data").setData(heatmapData);
@@ -195,7 +195,7 @@ export default function HeatMap({ data, events, isLoading, onEventSelect }: Heat
 
       const markerColor = getEventColor(event.eventType);
       
-      const marker = new window.mapboxgl.Marker({
+      const marker = new (window as any).mapboxgl.Marker({
         color: markerColor,
         className: "event-marker",
       })
