@@ -56,11 +56,28 @@ export const locations = pgTable("locations", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// EVENTU: P1 - Places table for Google Places data
+export const places = pgTable("places", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  placeId: varchar("place_id").notNull().unique(), // Google Place ID
+  name: varchar("name").notNull(),
+  formattedAddress: text("formatted_address"),
+  latitude: decimal("latitude", { precision: 10, scale: 8 }),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }),
+  rating: decimal("rating", { precision: 2, scale: 1 }),
+  userRatingsTotal: integer("user_ratings_total"),
+  isOpen: boolean("is_open"), // Current open/closed status
+  types: text("types").array(), // Place types from Google (e.g., "restaurant", "bar")
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const events = pgTable("events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: varchar("title").notNull(),
   description: text("description"),
   locationId: varchar("location_id").references(() => locations.id).notNull(),
+  placeId: varchar("place_id").references(() => places.placeId), // EVENTU: P1 - Google Place ID reference with FK constraint
   creatorId: varchar("creator_id").references(() => users.id).notNull(),
   eventType: varchar("event_type").notNull(), // clubs, bars, shows, fairs, food, other
   startDateTime: timestamp("start_date_time").notNull(),
@@ -187,11 +204,20 @@ export const eventsRelations = relations(events, ({ one, many }) => ({
     fields: [events.locationId],
     references: [locations.id],
   }),
+  place: one(places, { // EVENTU: P1 - Relation to places table
+    fields: [events.placeId],
+    references: [places.placeId],
+  }),
   creator: one(users, {
     fields: [events.creatorId],
     references: [users.id],
   }),
   attendees: many(eventAttendees),
+}));
+
+// EVENTU: P1 - Places relations
+export const placesRelations = relations(places, ({ many }) => ({
+  events: many(events),
 }));
 
 export const eventAttendeesRelations = relations(eventAttendees, ({ one }) => ({
@@ -298,6 +324,13 @@ export const insertProfileSchema = createInsertSchema(profiles).omit({
   updatedAt: true,
 });
 
+// EVENTU: P1 - Places insert schema
+export const insertPlaceSchema = createInsertSchema(places).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Relations for business claims
 export const businessClaimsRelations = relations(businessClaims, ({ one }) => ({
   user: one(users, {
@@ -328,7 +361,9 @@ export type HeatmapData = typeof heatmapData.$inferSelect;
 export type InsertBusinessClaim = z.infer<typeof insertBusinessClaimSchema>;
 export type BusinessClaim = typeof businessClaims.$inferSelect;
 
-// EVENTU: New types for P2, P3, P4
+// EVENTU: New types for P1, P2, P3, P4
+export type InsertPlace = z.infer<typeof insertPlaceSchema>;
+export type Place = typeof places.$inferSelect;
 export type InsertClaim = z.infer<typeof insertClaimSchema>;
 export type Claim = typeof claims.$inferSelect;
 export type InsertOwner = z.infer<typeof insertOwnerSchema>;
