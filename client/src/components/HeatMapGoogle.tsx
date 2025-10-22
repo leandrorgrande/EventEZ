@@ -201,8 +201,22 @@ export default function HeatMapGoogle({
 
     console.log('[EVENTU:MAP] Requesting places with filter:', currentFilter, 'types:', types); // EVENTU: Debug log
 
+    // EVENTU: Add timeout to detect if callback is blocked
+    let callbackExecuted = false;
+    const timeoutId = setTimeout(() => {
+      if (!callbackExecuted) {
+        console.error('[EVENTU:MAP] ⚠️ Places API callback NOT executed after 5 seconds!'); // EVENTU: Debug log
+        console.error('[EVENTU:MAP] This usually means:'); // EVENTU: Debug log
+        console.error('[EVENTU:MAP] 1. API key has HTTP referrer restrictions blocking *.replit.dev'); // EVENTU: Debug log
+        console.error('[EVENTU:MAP] 2. Billing not fully propagated yet (wait a few minutes)'); // EVENTU: Debug log
+        console.error('[EVENTU:MAP] 3. API key doesn\'t have permission for Places API'); // EVENTU: Debug log
+      }
+    }, 5000);
+
     if (placesServiceRef.current) {
       placesServiceRef.current.nearbySearch(request, (results: any[], status: any) => {
+        callbackExecuted = true;
+        clearTimeout(timeoutId);
         try {
           console.log('[EVENTU:MAP] Places API callback executed!'); // EVENTU: Debug log
           console.log('[EVENTU:MAP] Places API response status:', status); // EVENTU: Debug log
