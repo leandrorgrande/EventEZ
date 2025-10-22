@@ -72,10 +72,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/events', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const eventData = insertEventSchema.parse({
+      
+      // EVENTU: Convert ISO string dates to Date objects before validation
+      const processedBody = {
         ...req.body,
         creatorId: userId,
-      });
+        startDateTime: req.body.startDateTime ? new Date(req.body.startDateTime) : undefined,
+        endDateTime: req.body.endDateTime ? new Date(req.body.endDateTime) : undefined,
+      };
+      
+      // EVENTU: Validate end time is after start time
+      if (processedBody.startDateTime && processedBody.endDateTime) {
+        if (processedBody.endDateTime <= processedBody.startDateTime) {
+          return res.status(400).json({ 
+            message: "End date must be after start date" 
+          });
+        }
+      }
+      
+      const eventData = insertEventSchema.parse(processedBody);
       const event = await storage.createEvent(eventData);
       res.json(event);
     } catch (error) {

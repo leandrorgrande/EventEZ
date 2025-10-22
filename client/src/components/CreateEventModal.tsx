@@ -32,6 +32,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 
+// EVENTU: Enhanced validation schema with date checks
 const createEventSchema = z.object({
   title: z.string().min(1, "Event title is required"),
   description: z.string().optional(),
@@ -42,6 +43,15 @@ const createEventSchema = z.object({
   endDateTime: z.string().optional(),
   eventType: z.string().min(1, "Event type is required"),
   mediaFile: z.any().optional(),
+}).refine((data) => {
+  // EVENTU: Validate end time is after start time
+  if (data.endDateTime && data.startDateTime) {
+    return new Date(data.endDateTime) > new Date(data.startDateTime);
+  }
+  return true;
+}, {
+  message: "End date must be after start date",
+  path: ["endDateTime"],
 });
 
 interface CreateEventModalProps {

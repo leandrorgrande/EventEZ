@@ -1,0 +1,152 @@
+Você é o Ghostwriter e está trabalhando no projeto Event-U (React + Vite + Tailwind).
+O app já tem estrutura e design prontos.
+Seu objetivo é corrigir bugs e ativar funcionalidades, sem alterar o layout nem a organização atual de pastas.
+
+🧭 Modo de Trabalho
+
+Não mude estilos, cores ou layout.
+
+Não renomeie nem mova arquivos.
+
+Não apague nada existente.
+
+Apenas adicione código novo ou corrija bugs localmente.
+
+Descubra os arquivos automaticamente antes de editar.
+
+Use comentários // EVENTU: para marcar o que foi adicionado.
+
+Economize recursos: não instale libs novas; use lazy-load quando possível; reaproveite componentes e classes Tailwind existentes.
+
+🧩 Tarefas Prioritárias
+🥇 P0.1 — Mapa e Heatmap (fase inicial)
+
+Corrigir o mapa para exibir corretamente os locais e o heatmap.
+
+Garanta que o carregamento do Google Maps inclua as libraries places e visualization.
+
+Caso o VITE_GOOGLE_MAPS_API_KEY não exista, exibir aviso amigável.
+
+O mapa deve mostrar:
+
+Pins com os locais dos eventos.
+
+Camada de heatmap totalmente baseada nas informações do Google Maps:
+
+Usar a densidade de locais retornados na viewport, ponderada por sinais públicos oficiais (open_now, rating, user_ratings_total) e — quando disponível — os indicadores visuais de “movimento ao vivo” e “horário de pico mais tarde” exibidos pelo próprio Maps.
+
+O objetivo é que o Event-U reflita o comportamento real das regiões conforme o Google Maps, tanto ao vivo quanto nas próximas horas.
+
+Nenhum cálculo próprio nesta fase.
+
+Eventos impulsionados (boosted) devem ter destaque visual (borda/glow) e, se possível, peso levemente maior no heatmap.
+
+O mapa deve ocupar a altura útil da tela (height: calc(100vh - 120px)).
+
+Criar uma flag futura (USE_INTERNAL_HEATMAP_LOGIC = false) para, quando ativada, combinar dados internos (RSVPs/eventos) com os sinais do Maps.
+
+🥇 P0.2 — Criação de Evento
+
+Corrigir o erro “Failed to create event”.
+
+Antes de criar o evento:
+
+Verifique se o local tem place_id, name, address, lat, lng.
+
+Se não existir no banco, insira o local.
+
+Depois crie o evento vinculado a esse local.
+
+Upload de imagem apenas se houver arquivo selecionado.
+
+Validar datas (end_at > start_at).
+
+Exibir mensagens de erro amigáveis (ex.: “Configure Supabase antes de criar eventos”).
+
+🥇 P0.3 — Perfil (Settings / History)
+
+Corrigir botões do Profile:
+
+Settings → abrir tela simples com e-mail, senha, suporte e opção de deletar conta.
+
+Event History → mostrar abas:
+
+Criados → eventos criados pelo usuário.
+
+Participando → eventos com participação confirmada.
+
+Conectar ao backend real se ENV configuradas; caso contrário, usar mock local.
+
+🥇 P0.4 — Claim Business / Estabelecimento
+
+Corrigir o fluxo do “Claim Business”:
+
+Ao enviar, criar solicitação de verificação.
+
+Quando aprovada (mock nesta fase), marcar o usuário como dono do local.
+
+Após aprovação:
+
+Exibir em Profile uma seção “Your Business”.
+
+Botão “Open Owner Dashboard” abre o painel do estabelecimento.
+
+Painel do dono deve mostrar:
+
+Lista de eventos do local.
+
+Estatísticas simples (número de RSVPs e views simuladas).
+
+Botão “Create event for this place”.
+
+Reutilizar estilos existentes (não alterar design).
+
+💬 P1 — Chat (opcional, se houver tempo)
+
+Adicionar chat simples dentro dos eventos:
+
+Um canal por event_id.
+
+Usar realtime se Supabase configurado; caso contrário, mock local em memória.
+
+Página “Messages” lista eventos do usuário e abre o chat correspondente.
+
+🚀 P1.2 — Impulsionamento (Boost)
+
+Adicionar campos is_boosted, boost_until, boost_level (mock, sem pagamento real).
+
+No painel do dono: botão “Boost 7 days”.
+
+Pins e heatmap de eventos impulsionados com cor/brilho diferente.
+
+🧠 Lembretes
+
+Descubra arquivos automaticamente (“Map”, “Event”, “Profile”, etc.).
+
+Trabalhe incrementalmente: ajuste, teste, e explique o que foi feito.
+
+No final, entregue um resumo com:
+
+O que foi alterado/criado.
+
+Onde cada modificação foi feita.
+
+Quais variáveis .env precisam estar configuradas.
+
+Como testar tudo.
+
+✅ Objetivo Final
+
+Quando concluir, o Event-U deve permitir:
+
+Ver o mapa com heatmap ativo e pins visíveis.
+
+Criar eventos sem erro e listá-los no feed.
+
+Visualizar perfil e histórico do usuário.
+
+Fazer claim de local e usar o painel do dono.
+
+Abrir chat (mock ou realtime).
+
+Destacar eventos/locais impulsionados no mapa.
