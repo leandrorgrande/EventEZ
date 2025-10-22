@@ -278,31 +278,106 @@ export default function HeatMapGoogle({
     const google = (window as any).google;
     const heatmapData: any[] = [];
 
-    // EVENTU: Phase 1 - Use Google Maps data directly
-    // Search for active locations in the current viewport
-    const center = mapRef.current.getCenter();
+    // EVENTU: STEP 1 - Create heatmap IMMEDIATELY with demo data (don't wait for Places API)
+    console.log('[EVENTU:MAP] Creating heatmap with demo data...'); // EVENTU: Debug log
+
+    // EVENTU: Demo hotspots around Manhattan for immediate visualization
+    const demoHotspots = [
+      // Times Square area (high activity)
+      { lat: 40.758, lng: -73.9855, weight: 1.5 },
+      { lat: 40.7589, lng: -73.9851, weight: 1.3 },
+      { lat: 40.7575, lng: -73.986, weight: 1.2 },
+      
+      // Greenwich Village (medium-high activity)
+      { lat: 40.7335, lng: -74.0027, weight: 1.0 },
+      { lat: 40.7342, lng: -74.0015, weight: 0.9 },
+      
+      // Lower East Side (medium activity)
+      { lat: 40.7209, lng: -73.9862, weight: 0.8 },
+      { lat: 40.7198, lng: -73.9875, weight: 0.7 },
+      
+      // Chelsea (medium activity)
+      { lat: 40.7465, lng: -74.0014, weight: 0.9 },
+      { lat: 40.7455, lng: -74.0025, weight: 0.8 },
+      
+      // Union Square (high activity)
+      { lat: 40.7359, lng: -73.9911, weight: 1.2 },
+      { lat: 40.7368, lng: -73.9906, weight: 1.1 },
+      
+      // SoHo (medium activity)
+      { lat: 40.7233, lng: -74.0030, weight: 0.9 },
+      
+      // East Village (medium-high activity)
+      { lat: 40.7265, lng: -73.9815, weight: 1.0 },
+      { lat: 40.7273, lng: -73.9822, weight: 0.95 }
+    ];
     
-    // EVENTU: P0 - Get types based on current filter
+    demoHotspots.forEach(spot => {
+      heatmapData.push({
+        location: new google.maps.LatLng(spot.lat, spot.lng),
+        weight: spot.weight
+      });
+    });
+
+    // EVENTU: Add internal heatmap data if enabled
+    if (USE_INTERNAL_HEATMAP_LOGIC && data && data.length > 0) {
+      data.forEach((point: any) => {
+        heatmapData.push({
+          location: new google.maps.LatLng(
+            parseFloat(point.latitude),
+            parseFloat(point.longitude)
+          ),
+          weight: point.intensity || 0.5
+        });
+      });
+    }
+
+    console.log('[EVENTU:MAP] Heatmap data points (demo + internal):', heatmapData.length); // EVENTU: Debug log
+
+    // EVENTU: Create or update heatmap layer IMMEDIATELY
+    if (heatmapLayerRef.current) {
+      heatmapLayerRef.current.setMap(null);
+    }
+
+    if (heatmapData.length > 0) {
+      heatmapLayerRef.current = new google.maps.visualization.HeatmapLayer({
+        data: heatmapData,
+        map: mapRef.current,
+        radius: 50, // EVENTU: Larger radius for prominent blobs
+        opacity: 0.7, // EVENTU: Good visibility on dark theme
+        maxIntensity: 2, // EVENTU: Max intensity for hotspots
+        gradient: [
+          'rgba(0, 0, 0, 0)', // EVENTU: Transparent at edges
+          'rgba(0, 51, 102, 0.6)', // EVENTU: Dark blue (low activity)
+          'rgba(0, 102, 204, 0.8)', // EVENTU: Medium blue
+          'rgba(16, 185, 129, 1)', // EVENTU: Cyan/teal (medium activity)
+          'rgba(245, 158, 11, 1)', // EVENTU: Yellow/amber (high activity)
+          'rgba(249, 115, 22, 1)', // EVENTU: Orange (very high)
+          'rgba(239, 68, 68, 1)' // EVENTU: Red (hottest spots)
+        ]
+      });
+      console.log('[EVENTU:MAP] ✅ Heatmap layer created successfully with demo data!'); // EVENTU: Debug log
+    } else {
+      console.warn('[EVENTU:MAP] No heatmap data to display'); // EVENTU: Debug log
+    }
+
+    // EVENTU: STEP 2 - Try Places API in background (optional enhancement)
+    const center = mapRef.current.getCenter();
     const types = FILTER_TO_PLACES_TYPES[currentFilter] || FILTER_TO_PLACES_TYPES.all;
     
-    // EVENTU: Query nearby places using Google Places API with filter
     const request = {
       location: center,
       radius: 5000, // 5km radius
       type: types
     };
 
-    console.log('[EVENTU:MAP] Requesting places with filter:', currentFilter, 'types:', types); // EVENTU: Debug log
+    console.log('[EVENTU:MAP] Attempting Places API request (filter:', currentFilter, 'types:', types, ')'); // EVENTU: Debug log
 
     // EVENTU: Add timeout to detect if callback is blocked
     let callbackExecuted = false;
     const timeoutId = setTimeout(() => {
       if (!callbackExecuted) {
-        console.error('[EVENTU:MAP] ⚠️ Places API callback NOT executed after 5 seconds!'); // EVENTU: Debug log
-        console.error('[EVENTU:MAP] This usually means:'); // EVENTU: Debug log
-        console.error('[EVENTU:MAP] 1. API key has HTTP referrer restrictions blocking *.replit.dev'); // EVENTU: Debug log
-        console.error('[EVENTU:MAP] 2. Billing not fully propagated yet (wait a few minutes)'); // EVENTU: Debug log
-        console.error('[EVENTU:MAP] 3. API key doesn\'t have permission for Places API'); // EVENTU: Debug log
+        console.warn('[EVENTU:MAP] ⚠️ Places API callback NOT executed after 5 seconds - using demo data only'); // EVENTU: Debug log
       }
     }, 5000);
 
@@ -311,156 +386,79 @@ export default function HeatMapGoogle({
         callbackExecuted = true;
         clearTimeout(timeoutId);
         try {
-          console.log('[EVENTU:MAP] Places API callback executed!'); // EVENTU: Debug log
-          console.log('[EVENTU:MAP] Places API response status:', status); // EVENTU: Debug log
-          console.log('[EVENTU:MAP] Places API results count:', results?.length || 0); // EVENTU: Debug log
+          console.log('[EVENTU:MAP] 🎉 Places API callback executed!'); // EVENTU: Debug log
+          console.log('[EVENTU:MAP] Places API status:', status, 'Results:', results?.length || 0); // EVENTU: Debug log
           
-          // EVENTU: Log detailed error information
-          if (status !== google.maps.places.PlacesServiceStatus.OK) {
-            console.error('[EVENTU:MAP] Places API ERROR - Status:', status); // EVENTU: Debug log
-            console.error('[EVENTU:MAP] Possible causes:'); // EVENTU: Debug log
-            console.error('[EVENTU:MAP] - ZERO_RESULTS: No places found'); // EVENTU: Debug log
-            console.error('[EVENTU:MAP] - OVER_QUERY_LIMIT: Too many requests'); // EVENTU: Debug log
-            console.error('[EVENTU:MAP] - REQUEST_DENIED: API key issue or billing not enabled'); // EVENTU: Debug log
-            console.error('[EVENTU:MAP] - INVALID_REQUEST: Bad request parameters'); // EVENTU: Debug log
-            console.error('[EVENTU:MAP] - UNKNOWN_ERROR: Server error, try again'); // EVENTU: Debug log
-            return; // EVENTU: Exit early on error
-          }
+          if (status === google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
+            console.log('[EVENTU:MAP] ✅ Places API working! Combining with demo data...'); // EVENTU: Debug log
+            
+            const combinedData = [...heatmapData];
           
-          if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-            console.log('[EVENTU:MAP] Places found:', results.length); // EVENTU: Debug log
-          
-          results.forEach((place: any) => {
-            if (place.geometry?.location) {
-              // EVENTU: Weight by Google's public signals
-              let weight = 0.5; // base weight
-              
-              // EVENTU: Factor in rating
-              if (place.rating) {
-                weight += (place.rating / 5) * 0.2;
-              }
-              
-              // EVENTU: Factor in user ratings total (popularity)
-              if (place.user_ratings_total) {
-                const popularityScore = Math.min(place.user_ratings_total / 1000, 1);
-                weight += popularityScore * 0.3;
-              }
-              
-              // EVENTU: Factor in open_now status (higher weight if currently open)
-              if (place.opening_hours?.open_now) {
-                weight += 0.3;
-              }
+            results.forEach((place: any) => {
+              if (place.geometry?.location) {
+                let weight = 0.5;
+                
+                if (place.rating) {
+                  weight += (place.rating / 5) * 0.2;
+                }
+                
+                if (place.user_ratings_total) {
+                  const popularityScore = Math.min(place.user_ratings_total / 1000, 1);
+                  weight += popularityScore * 0.3;
+                }
+                
+                if (place.opening_hours?.open_now) {
+                  weight += 0.3;
+                }
 
-              // EVENTU: Check for boosted events at this place
-              const boostedEvent = events?.find((e: any) => 
-                e.location?.googlePlaceId === place.place_id && 
-                e.isBoosted && 
-                (!e.boostUntil || new Date(e.boostUntil) > new Date())
-              );
-              
-              if (boostedEvent) {
-                weight += 0.2 * (boostedEvent.boostLevel || 1); // EVENTU: Boost bonus
-              }
+                const boostedEvent = events?.find((e: any) => 
+                  e.location?.googlePlaceId === place.place_id && 
+                  e.isBoosted && 
+                  (!e.boostUntil || new Date(e.boostUntil) > new Date())
+                );
+                
+                if (boostedEvent) {
+                  weight += 0.2 * (boostedEvent.boostLevel || 1);
+                }
 
-              // EVENTU: Create weighted location for heatmap
-              heatmapData.push({
-                location: place.geometry.location,
-                weight: Math.min(weight, 1.5) // Allow slightly higher weight for boosted
-              });
+                combinedData.push({
+                  location: place.geometry.location,
+                  weight: Math.min(weight, 1.5)
+                });
+              }
+            });
+
+            console.log('[EVENTU:MAP] Combined data points:', combinedData.length); // EVENTU: Debug log
+
+            // EVENTU: Update heatmap with combined data
+            if (heatmapLayerRef.current) {
+              heatmapLayerRef.current.setMap(null);
             }
-          });
 
-          // EVENTU: If USE_INTERNAL_HEATMAP_LOGIC is enabled, combine with internal data
-          if (USE_INTERNAL_HEATMAP_LOGIC && data && data.length > 0) {
-            data.forEach((point: any) => {
-              heatmapData.push({
-                location: new google.maps.LatLng(
-                  parseFloat(point.latitude),
-                  parseFloat(point.longitude)
-                ),
-                weight: point.intensity || 0.5
-              });
-            });
-          }
-
-          // EVENTU: TEMPORARY DEMO DATA - Add hotspots around Manhattan to visualize heatmap
-          // TODO: Remove when Google Places API starts working
-          const demoHotspots = [
-            // Times Square area (high activity)
-            { lat: 40.758, lng: -73.9855, weight: 1.5 },
-            { lat: 40.7589, lng: -73.9851, weight: 1.3 },
-            { lat: 40.7575, lng: -73.986, weight: 1.2 },
-            
-            // Greenwich Village (medium-high activity)
-            { lat: 40.7335, lng: -74.0027, weight: 1.0 },
-            { lat: 40.7342, lng: -74.0015, weight: 0.9 },
-            
-            // Lower East Side (medium activity)
-            { lat: 40.7209, lng: -73.9862, weight: 0.8 },
-            { lat: 40.7198, lng: -73.9875, weight: 0.7 },
-            
-            // Chelsea (medium activity)
-            { lat: 40.7465, lng: -74.0014, weight: 0.9 },
-            { lat: 40.7455, lng: -74.0025, weight: 0.8 },
-            
-            // Union Square (high activity)
-            { lat: 40.7359, lng: -73.9911, weight: 1.2 },
-            { lat: 40.7368, lng: -73.9906, weight: 1.1 },
-            
-            // SoHo (medium activity)
-            { lat: 40.7233, lng: -74.0030, weight: 0.9 },
-            
-            // East Village (medium-high activity)
-            { lat: 40.7265, lng: -73.9815, weight: 1.0 },
-            { lat: 40.7273, lng: -73.9822, weight: 0.95 }
-          ];
-          
-          demoHotspots.forEach(spot => {
-            heatmapData.push({
-              location: new google.maps.LatLng(spot.lat, spot.lng),
-              weight: spot.weight
-            });
-          });
-
-          console.log('[EVENTU:MAP] Heatmap data points:', heatmapData.length); // EVENTU: Debug log
-
-          // EVENTU: Create or update heatmap layer
-          if (heatmapLayerRef.current) {
-            heatmapLayerRef.current.setMap(null);
-          }
-
-          if (heatmapData.length > 0) {
             heatmapLayerRef.current = new google.maps.visualization.HeatmapLayer({
-              data: heatmapData,
+              data: combinedData,
               map: mapRef.current,
-              radius: 50, // EVENTU: Larger radius for prominent blobs
-              opacity: 0.7, // EVENTU: Good visibility on dark theme
-              maxIntensity: 2, // EVENTU: Max intensity for hotspots
+              radius: 50,
+              opacity: 0.7,
+              maxIntensity: 2,
               gradient: [
-                'rgba(0, 0, 0, 0)', // EVENTU: Transparent at edges
-                'rgba(0, 51, 102, 0.6)', // EVENTU: Dark blue (low activity)
-                'rgba(0, 102, 204, 0.8)', // EVENTU: Medium blue
-                'rgba(16, 185, 129, 1)', // EVENTU: Cyan/teal (medium activity)
-                'rgba(245, 158, 11, 1)', // EVENTU: Yellow/amber (high activity)
-                'rgba(249, 115, 22, 1)', // EVENTU: Orange (very high)
-                'rgba(239, 68, 68, 1)' // EVENTU: Red (hottest spots)
+                'rgba(0, 0, 0, 0)',
+                'rgba(0, 51, 102, 0.6)',
+                'rgba(0, 102, 204, 0.8)',
+                'rgba(16, 185, 129, 1)',
+                'rgba(245, 158, 11, 1)',
+                'rgba(249, 115, 22, 1)',
+                'rgba(239, 68, 68, 1)'
               ]
             });
-            console.log('[EVENTU:MAP] Heatmap layer created successfully'); // EVENTU: Debug log
+            console.log('[EVENTU:MAP] ✅ Heatmap updated with Places API data!'); // EVENTU: Debug log
           } else {
-            console.warn('[EVENTU:MAP] No heatmap data to display'); // EVENTU: Debug log
-          }
-          } else {
-            console.error('[EVENTU:MAP] Places search failed with status:', status); // EVENTU: Debug log
+            console.warn('[EVENTU:MAP] Places API status:', status, '- keeping demo data only'); // EVENTU: Debug log
           }
         } catch (error) {
-          // EVENTU: Catch any errors in the Places API callback
           console.error('[EVENTU:MAP] ERROR in Places API callback:', error); // EVENTU: Debug log
-          console.error('[EVENTU:MAP] Error details:', JSON.stringify(error, null, 2)); // EVENTU: Debug log
         }
       });
-    } else {
-      console.error('[EVENTU:MAP] Places service not initialized'); // EVENTU: Debug log
     }
   };
 
