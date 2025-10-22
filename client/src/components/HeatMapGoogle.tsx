@@ -32,6 +32,9 @@ export default function HeatMapGoogle({
   currentFilter = 'all',
   onCreateEventAtPlace 
 }: HeatMapGoogleProps) {
+  console.log('[EVENTU:COMPONENT] HeatMapGoogle component mounted/rendered'); // EVENTU: Debug log
+  console.log('[EVENTU:COMPONENT] Props:', { dataLength: data?.length, eventsLength: events?.length, isLoading, currentFilter }); // EVENTU: Debug log
+  
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const [googleMapsLoaded, setGoogleMapsLoaded] = useState(false);
@@ -44,6 +47,7 @@ export default function HeatMapGoogle({
 
   // EVENTU: Load Google Maps with Places and Visualization libraries
   useEffect(() => {
+    console.log('[EVENTU:COMPONENT] Google Maps loading effect triggered'); // EVENTU: Debug log
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
     
     if (!apiKey) {
@@ -110,23 +114,21 @@ export default function HeatMapGoogle({
       });
       
       console.log('[EVENTU:MAP] Map object created:', !!mapRef.current); // EVENTU: Debug log
+      
+      // EVENTU: Initialize Places service immediately for location data
+      placesServiceRef.current = new google.maps.places.PlacesService(mapRef.current);
+      console.log('[EVENTU:MAP] Places service initialized'); // EVENTU: Debug log
 
-      // EVENTU: Wait for map to be fully loaded
-      google.maps.event.addListenerOnce(mapRef.current, 'tilesloaded', () => {
-        console.log('[EVENTU:MAP] Map tiles loaded successfully!'); // EVENTU: Debug log
-        
-        // EVENTU: Initialize Places service for location data
-        placesServiceRef.current = new google.maps.places.PlacesService(mapRef.current);
-        console.log('[EVENTU:MAP] Places service initialized'); // EVENTU: Debug log
-
-        // EVENTU: Load heatmap based on Google Maps data
-        setTimeout(() => loadGoogleBasedHeatmap(), 1000); // Small delay to ensure map is ready
-        
-        // EVENTU: Add event markers
-        if (events && events.length > 0) {
-          addEventMarkers();
-        }
-      });
+      // EVENTU: Load heatmap based on Google Maps data (with delay to ensure map is ready)
+      setTimeout(() => {
+        console.log('[EVENTU:MAP] Loading heatmap...'); // EVENTU: Debug log
+        loadGoogleBasedHeatmap();
+      }, 1500);
+      
+      // EVENTU: Add event markers
+      if (events && events.length > 0) {
+        setTimeout(() => addEventMarkers(), 1500);
+      }
 
     } catch (error) {
       console.error("[EVENTU:MAP] Error initializing Google Maps:", error);
