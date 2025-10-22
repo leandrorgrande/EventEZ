@@ -19,7 +19,7 @@ The client uses React 18 with Vite for fast development and building. The UI is 
 The server is built with Express.js and follows a REST API pattern. The architecture separates concerns with dedicated modules for authentication (Replit Auth integration), database operations (storage layer), and route handling. The server uses TypeScript throughout and implements session-based authentication with PostgreSQL session storage.
 
 **Database Design**
-Uses Drizzle ORM with PostgreSQL for type-safe database operations. The schema includes core entities: users, locations, events, event attendees, check-ins, messages, and heatmap data. The database supports both real-time data collection and historical analytics through separate tables for live activity tracking and aggregated heatmap data.
+Uses Drizzle ORM with PostgreSQL for type-safe database operations. The schema includes core entities: users, locations, events, event attendees, check-ins, messages, and heatmap data. The database supports both real-time data collection and historical analytics through separate tables for live activity tracking and aggregated heatmap data. Events support boost/promotion features with fields for boost status, expiration date, and intensity level (1-3).
 
 **Real-time Features**
 The heatmap system collects anonymous location data from active users to generate live activity hotspots. The system implements both live mode (showing current activity) and prediction mode (forecasting based on confirmed event attendance and historical patterns). Data refreshes every 5 seconds for live updates.
@@ -28,7 +28,14 @@ The heatmap system collects anonymous location data from active users to generat
 Integrates with Replit's OpenID Connect authentication system. The auth system supports session management with PostgreSQL-backed session storage and includes middleware for protecting routes. User roles include regular users, business owners, and administrators with different permission levels.
 
 **Map Integration**
-Uses Mapbox GL JS for interactive mapping and heatmap visualization. The map system displays event locations with custom markers, real-time activity heatmaps with color gradients (blue to red intensity), and supports filtering by event type and location categories.
+Uses Google Maps JavaScript API with Places and Visualization libraries for interactive mapping and heatmap visualization. The map system displays event locations with custom markers, real-time activity heatmaps with color gradients (blue to red intensity), and supports filtering by event type and location categories. Heatmap data is generated from Google Places API using location density, ratings, popularity metrics, and business open status.
+
+**Profile Features**
+Users have access to comprehensive profile management including:
+- Settings modal with email/password change, support contact form, and account deletion
+- Event History modal with tabs for Created Events and Attending Events
+- Business claim submission for location ownership verification
+- Profile editing with personal information and preferences
 
 **API Design**
 RESTful API with endpoints organized by resource type: authentication, users, locations, events, check-ins, messages, and heatmap data. The API implements proper error handling, request validation using Zod schemas, and returns consistent JSON responses.
@@ -46,8 +53,8 @@ RESTful API with endpoints organized by resource type: authentication, users, lo
 - passport for authentication middleware
 
 **Mapping Services**
-- Mapbox GL JS for interactive maps and heatmap visualization
-- Google Places API integration (referenced in schema for location data)
+- Google Maps JavaScript API with Places and Visualization libraries for interactive maps and heatmap visualization
+- Google Places API for location data, ratings, and popularity metrics
 
 **UI Components**
 - Radix UI primitives for accessible component foundation

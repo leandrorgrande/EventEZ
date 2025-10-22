@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Map, Calendar, MessageCircle, User, Shield } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useLocation } from "wouter"; // EVENTU: Added client-side routing
 
 interface BottomNavigationProps {
   currentPage: string;
@@ -9,10 +10,11 @@ interface BottomNavigationProps {
 
 export default function BottomNavigation({ currentPage, onNavigate }: BottomNavigationProps) {
   const { user } = useAuth();
+  const [, setLocation] = useLocation(); // EVENTU: Added client-side routing
 
   const handleNavigation = (page: string, href?: string) => {
     if (href) {
-      window.location.href = href;
+      setLocation(href); // EVENTU: Changed from window.location.href to client-side navigation
     } else if (onNavigate) {
       onNavigate(page);
     }
