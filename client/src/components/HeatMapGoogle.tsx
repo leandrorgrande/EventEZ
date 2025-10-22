@@ -86,7 +86,16 @@ export default function HeatMapGoogle({
 
   // EVENTU: Initialize Google Map
   useEffect(() => {
-    if (!googleMapsLoaded || !mapContainerRef.current || mapRef.current) return;
+    console.log('[EVENTU:MAP-INIT-CHECK] Checking conditions:', { 
+      googleMapsLoaded, 
+      hasContainer: !!mapContainerRef.current, 
+      mapExists: !!mapRef.current 
+    }); // EVENTU: Debug log
+    
+    if (!googleMapsLoaded || !mapContainerRef.current || mapRef.current) {
+      console.log('[EVENTU:MAP-INIT-CHECK] Cannot initialize - bailing out'); // EVENTU: Debug log
+      return;
+    }
 
     console.log('[EVENTU:MAP] Starting map initialization...'); // EVENTU: Debug log
     console.log('[EVENTU:MAP] Container ref exists:', !!mapContainerRef.current); // EVENTU: Debug log
