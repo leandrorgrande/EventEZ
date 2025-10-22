@@ -8,12 +8,16 @@ import BottomNavigation from "@/components/BottomNavigation";
 import { useAuth } from "@/hooks/useAuth";
 import EditProfileModal from "@/components/EditProfileModal";
 import BusinessClaimModal from "@/components/BusinessClaimModal";
-import { Settings, History, Store, LogOut, Calendar, Users, Edit3, Building2 } from "lucide-react";
+import SettingsModal from "@/components/SettingsModal"; // EVENTU: Added Settings modal
+import EventHistoryModal from "@/components/EventHistoryModal"; // EVENTU: Added Event History modal
+import { Settings, History, LogOut, Calendar, Users, Edit3, Building2 } from "lucide-react";
 
 export default function Profile() {
   const { user } = useAuth();
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [businessClaimOpen, setBusinessClaimOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false); // EVENTU: Settings modal state
+  const [historyOpen, setHistoryOpen] = useState(false); // EVENTU: History modal state
 
   const { data: userEvents } = useQuery({
     queryKey: ["/api/users", user?.id, "events"],
@@ -129,10 +133,11 @@ export default function Profile() {
           </CardContent>
         </Card>
 
-        {/* Menu Options */}
+        {/* Menu Options - EVENTU: Added onClick handlers */}
         <div className="space-y-2">
           <Button
             variant="ghost"
+            onClick={() => setSettingsOpen(true)}
             className="w-full justify-start text-white hover:bg-slate-700/50"
             data-testid="button-settings"
           >
@@ -142,6 +147,7 @@ export default function Profile() {
 
           <Button
             variant="ghost"
+            onClick={() => setHistoryOpen(true)}
             className="w-full justify-start text-white hover:bg-slate-700/50"
             data-testid="button-history"
           >
@@ -176,7 +182,7 @@ export default function Profile() {
       {/* Bottom Navigation */}
       <BottomNavigation currentPage="profile" />
 
-      {/* Modals */}
+      {/* Modals - EVENTU: Added Settings and History modals */}
       <EditProfileModal
         open={editProfileOpen}
         onOpenChange={setEditProfileOpen}
@@ -186,6 +192,18 @@ export default function Profile() {
       <BusinessClaimModal
         open={businessClaimOpen}
         onOpenChange={setBusinessClaimOpen}
+      />
+
+      <SettingsModal
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        user={user}
+      />
+
+      <EventHistoryModal
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        user={user}
       />
     </div>
   );
