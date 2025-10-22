@@ -39,6 +39,7 @@ export default function HeatMapGoogle({
   const mapRef = useRef<any>(null);
   const [googleMapsLoaded, setGoogleMapsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [containerMounted, setContainerMounted] = useState(false); // EVENTU: Track when container is mounted
   const heatmapLayerRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const placeMarkersRef = useRef<any[]>([]); // EVENTU: P0 - Separate markers for places
@@ -84,15 +85,24 @@ export default function HeatMapGoogle({
     loadGoogleMaps();
   }, []);
 
+  // EVENTU: Track when container div is mounted
+  useEffect(() => {
+    if (mapContainerRef.current && !containerMounted) {
+      console.log('[EVENTU:MAP] Container mounted!'); // EVENTU: Debug log
+      setContainerMounted(true);
+    }
+  }, [mapContainerRef.current, containerMounted]);
+
   // EVENTU: Initialize Google Map
   useEffect(() => {
     console.log('[EVENTU:MAP-INIT-CHECK] Checking conditions:', { 
       googleMapsLoaded, 
+      containerMounted,
       hasContainer: !!mapContainerRef.current, 
       mapExists: !!mapRef.current 
     }); // EVENTU: Debug log
     
-    if (!googleMapsLoaded || !mapContainerRef.current || mapRef.current) {
+    if (!googleMapsLoaded || !containerMounted || !mapContainerRef.current || mapRef.current) {
       console.log('[EVENTU:MAP-INIT-CHECK] Cannot initialize - bailing out'); // EVENTU: Debug log
       return;
     }
@@ -151,7 +161,7 @@ export default function HeatMapGoogle({
         heatmapLayerRef.current.setMap(null);
       }
     };
-  }, [googleMapsLoaded]);
+  }, [googleMapsLoaded, containerMounted]); // EVENTU: Updated dependencies
 
   // EVENTU: Update heatmap when data or filter changes
   useEffect(() => {
