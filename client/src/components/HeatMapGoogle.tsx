@@ -84,47 +84,57 @@ export default function HeatMapGoogle({
   useEffect(() => {
     if (!googleMapsLoaded || !mapContainerRef.current || mapRef.current) return;
 
+    console.log('[EVENTU:MAP] Starting map initialization...'); // EVENTU: Debug log
+    console.log('[EVENTU:MAP] Container ref exists:', !!mapContainerRef.current); // EVENTU: Debug log
+    console.log('[EVENTU:MAP] Google maps loaded:', !!googleMapsLoaded); // EVENTU: Debug log
+
     try {
       const google = (window as any).google;
       
+      if (!google || !google.maps) {
+        console.error('[EVENTU:MAP] Google Maps API not available');
+        setLoadError("Google Maps API not loaded properly");
+        return;
+      }
+
+      // EVENTU: P0 - Initialize map without mapId and with minimal config first
       mapRef.current = new google.maps.Map(mapContainerRef.current, {
-        center: { lat: 40.748, lng: -73.985 }, // NYC
-        zoom: 13,
-        mapTypeId: "roadmap",
-        styles: [
-          { elementType: "geometry", stylers: [{ color: "#1e293b" }] },
-          { elementType: "labels.text.stroke", stylers: [{ color: "#1e293b" }] },
-          { elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
-          {
-            featureType: "road",
-            elementType: "geometry",
-            stylers: [{ color: "#334155" }]
-          },
-          {
-            featureType: "water",
-            elementType: "geometry",
-            stylers: [{ color: "#0f172a" }]
-          }
-        ],
-        mapId: "event-u-dark-map"
+        center: { lat: 40.7589, lng: -73.9851 }, // NYC - Times Square
+        zoom: 14,
+        mapTypeId: google.maps.MapTypeId.ROADMAP,
+        disableDefaultUI: false,
+        zoomControl: true,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+      });
+      
+      console.log('[EVENTU:MAP] Map object created:', !!mapRef.current); // EVENTU: Debug log
+
+      // EVENTU: Wait for map to be fully loaded
+      google.maps.event.addListenerOnce(mapRef.current, 'tilesloaded', () => {
+        console.log('[EVENTU:MAP] Map tiles loaded successfully!'); // EVENTU: Debug log
+        
+        // EVENTU: Initialize Places service for location data
+        placesServiceRef.current = new google.maps.places.PlacesService(mapRef.current);
+        console.log('[EVENTU:MAP] Places service initialized'); // EVENTU: Debug log
+
+        // EVENTU: Load heatmap based on Google Maps data
+        setTimeout(() => loadGoogleBasedHeatmap(), 1000); // Small delay to ensure map is ready
+        
+        // EVENTU: Add event markers
+        if (events && events.length > 0) {
+          addEventMarkers();
+        }
       });
 
-      // EVENTU: Initialize Places service for location data
-      placesServiceRef.current = new google.maps.places.PlacesService(mapRef.current);
-
-      // EVENTU: Load heatmap based on Google Maps data
-      loadGoogleBasedHeatmap();
-      
-      // EVENTU: Add event markers
-      if (events && events.length > 0) {
-        addEventMarkers();
-      }
     } catch (error) {
-      console.error("Error initializing Google Maps:", error);
+      console.error("[EVENTU:MAP] Error initializing Google Maps:", error);
       setLoadError("Error initializing map. Please refresh the page.");
     }
 
     return () => {
+      console.log('[EVENTU:MAP] Cleaning up map'); // EVENTU: Debug log
       clearMarkers();
       if (heatmapLayerRef.current) {
         heatmapLayerRef.current.setMap(null);
@@ -134,7 +144,8 @@ export default function HeatMapGoogle({
 
   // EVENTU: Update heatmap when data or filter changes
   useEffect(() => {
-    if (mapRef.current && googleMapsLoaded) {
+    if (mapRef.current && googleMapsLoaded && placesServiceRef.current) {
+      console.log('[EVENTU:MAP] Reloading heatmap due to filter/data change'); // EVENTU: Debug log
       loadGoogleBasedHeatmap();
     }
   }, [data, googleMapsLoaded, currentFilter]);
@@ -167,9 +178,17 @@ export default function HeatMapGoogle({
       type: types
     };
 
+    console.log('[EVENTU:MAP] Requesting places with filter:', currentFilter, 'types:', types); // EVENTU: Debug log
+
     if (placesServiceRef.current) {
       placesServiceRef.current.nearbySearch(request, (results: any[], status: any) => {
+        console.log('[EVENTU:MAP] Places API callback executed!'); // EVENTU: Debug log
+        console.log('[EVENTU:MAP] Places API response status:', status); // EVENTU: Debug log
+        console.log('[EVENTU:MAP] Places API results count:', results?.length || 0); // EVENTU: Debug log
+        
         if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+          console.log('[EVENTU:MAP] Places found:', results.length); // EVENTU: Debug log
+          
           results.forEach((place: any) => {
             if (place.geometry?.location) {
               // EVENTU: Weight by Google's public signals
@@ -191,10 +210,21 @@ export default function HeatMapGoogle({
                 weight += 0.3;
               }
 
+              // EVENTU: Check for boosted events at this place
+              const boostedEvent = events?.find((e: any) => 
+                e.location?.googlePlaceId === place.place_id && 
+                e.isBoosted && 
+                (!e.boostUntil || new Date(e.boostUntil) > new Date())
+              );
+              
+              if (boostedEvent) {
+                weight += 0.2 * (boostedEvent.boostLevel || 1); // EVENTU: Boost bonus
+              }
+
               // EVENTU: Create weighted location for heatmap
               heatmapData.push({
                 location: place.geometry.location,
-                weight: Math.min(weight, 1)
+                weight: Math.min(weight, 1.5) // Allow slightly higher weight for boosted
               });
             }
           });
@@ -212,27 +242,39 @@ export default function HeatMapGoogle({
             });
           }
 
+          console.log('[EVENTU:MAP] Heatmap data points:', heatmapData.length); // EVENTU: Debug log
+
           // EVENTU: Create or update heatmap layer
           if (heatmapLayerRef.current) {
             heatmapLayerRef.current.setMap(null);
           }
 
-          heatmapLayerRef.current = new google.maps.visualization.HeatmapLayer({
-            data: heatmapData,
-            map: mapRef.current,
-            radius: 30,
-            opacity: 0.7,
-            gradient: [
-              'rgba(0, 0, 255, 0)',
-              'rgba(59, 130, 246, 1)',
-              'rgba(16, 185, 129, 1)',
-              'rgba(245, 158, 11, 1)',
-              'rgba(249, 115, 22, 1)',
-              'rgba(239, 68, 68, 1)'
-            ]
-          });
+          if (heatmapData.length > 0) {
+            heatmapLayerRef.current = new google.maps.visualization.HeatmapLayer({
+              data: heatmapData,
+              map: mapRef.current,
+              radius: 40, // EVENTU: Increased radius for better visibility
+              opacity: 0.8, // EVENTU: Increased opacity
+              maxIntensity: 2, // EVENTU: Added max intensity
+              gradient: [
+                'rgba(0, 0, 255, 0)',
+                'rgba(59, 130, 246, 1)',
+                'rgba(16, 185, 129, 1)',
+                'rgba(245, 158, 11, 1)',
+                'rgba(249, 115, 22, 1)',
+                'rgba(239, 68, 68, 1)'
+              ]
+            });
+            console.log('[EVENTU:MAP] Heatmap layer created successfully'); // EVENTU: Debug log
+          } else {
+            console.warn('[EVENTU:MAP] No heatmap data to display'); // EVENTU: Debug log
+          }
+        } else {
+          console.error('[EVENTU:MAP] Places search failed with status:', status); // EVENTU: Debug log
         }
       });
+    } else {
+      console.error('[EVENTU:MAP] Places service not initialized'); // EVENTU: Debug log
     }
   };
 
