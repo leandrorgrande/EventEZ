@@ -47,8 +47,8 @@ export default function BottomNavigation({ currentPage, onNavigate }: BottomNavi
     },
   ];
 
-  // Add admin tab if user is admin
-  if (user?.userType === "admin") {
+  // EVENTU: Add admin tab if user is admin or support email
+  if (user && ((user as any).userType === "admin" || (user as any).email === import.meta.env.VITE_SUPPORT_EMAIL)) {
     navItems.push({
       id: "admin",
       label: "Admin",

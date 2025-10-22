@@ -122,6 +122,47 @@ export const businessClaims = pgTable("business_claims", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// EVENTU: P3 - Claims table with place_id and evidence
+export const claims = pgTable("claims", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  placeId: varchar("place_id").notNull(), // Google Place ID
+  requesterUserId: varchar("requester_user_id").references(() => users.id).notNull(),
+  method: varchar("method"), // e.g., "email", "phone", "documents"
+  evidence: text("evidence"), // Description/proof of ownership
+  status: varchar("status").default("pending"), // pending, approved, rejected
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// EVENTU: P3 - Owners table linking users to places
+export const owners = pgTable("owners", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  placeId: varchar("place_id").notNull(), // Google Place ID
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// EVENTU: P2 - Support tickets (fallback when SMTP not configured)
+export const supportTickets = pgTable("support_tickets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  subject: varchar("subject").notNull(),
+  message: text("message").notNull(),
+  status: varchar("status").default("open"), // open, sent, error
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// EVENTU: P4 - Profiles for chat search
+export const profiles = pgTable("profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull().unique(),
+  displayName: varchar("display_name").notNull(),
+  email: varchar("email").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   events: many(events),
@@ -230,6 +271,33 @@ export const insertBusinessClaimSchema = createInsertSchema(businessClaims).omit
   createdAt: true,
 });
 
+// EVENTU: P3 - Claims insert schema
+export const insertClaimSchema = createInsertSchema(claims).omit({
+  id: true,
+  createdAt: true,
+  reviewedBy: true,
+  reviewedAt: true,
+});
+
+// EVENTU: P3 - Owners insert schema
+export const insertOwnerSchema = createInsertSchema(owners).omit({
+  id: true,
+  createdAt: true,
+});
+
+// EVENTU: P2 - Support tickets insert schema
+export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit({
+  id: true,
+  createdAt: true,
+});
+
+// EVENTU: P4 - Profiles insert schema
+export const insertProfileSchema = createInsertSchema(profiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Relations for business claims
 export const businessClaimsRelations = relations(businessClaims, ({ one }) => ({
   user: one(users, {
@@ -259,3 +327,13 @@ export type InsertHeatmapData = z.infer<typeof insertHeatmapDataSchema>;
 export type HeatmapData = typeof heatmapData.$inferSelect;
 export type InsertBusinessClaim = z.infer<typeof insertBusinessClaimSchema>;
 export type BusinessClaim = typeof businessClaims.$inferSelect;
+
+// EVENTU: New types for P2, P3, P4
+export type InsertClaim = z.infer<typeof insertClaimSchema>;
+export type Claim = typeof claims.$inferSelect;
+export type InsertOwner = z.infer<typeof insertOwnerSchema>;
+export type Owner = typeof owners.$inferSelect;
+export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
+export type SupportTicket = typeof supportTickets.$inferSelect;
+export type InsertProfile = z.infer<typeof insertProfileSchema>;
+export type Profile = typeof profiles.$inferSelect;

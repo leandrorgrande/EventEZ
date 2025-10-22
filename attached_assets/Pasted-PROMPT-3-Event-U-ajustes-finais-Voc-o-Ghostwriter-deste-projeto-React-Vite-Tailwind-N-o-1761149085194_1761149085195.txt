@@ -1,0 +1,153 @@
+PROMPT 3 — Event-U (ajustes finais)
+
+Você é o Ghostwriter deste projeto React + Vite + Tailwind.
+Não alterar layout, não mover/renomear arquivos. Apenas adicionar/corrigir localmente e marcar com // EVENTU:.
+Trabalhe dentro da estrutura existente (descubra os arquivos antes de editar).
+
+ENVs usadas
+
+VITE_GOOGLE_MAPS_API_KEY (já configurada)
+
+(opcional para e-mail)
+
+SUPPORT_TO_EMAIL=eventyouapp@gmail.com
+
+SMTP_HOST=smtp.gmail.com
+
+SMTP_PORT=465
+
+SMTP_USER=eventyouapp@gmail.com
+
+SMTP_PASS=<app_password>
+
+Se SMTP faltar, não quebre: salve ticket/claim em banco e mostre aviso “enviado (pendente de e-mail)”.
+
+P0 — MAPA (heatmap + pins clicáveis + filtros)
+
+Heatmap (Maps Visualization)
+
+Ativar google.maps.visualization.HeatmapLayer.
+
+Fonte de dados: resultados do Places na viewport (conforme filtros) + peso por sinais oficiais (open_now, rating, user_ratings_total).
+
+Se existir flag de evento boosted, some um bônus leve ao peso.
+
+Pins clicáveis (markers + info)
+
+Cada lugar deve ter Marker.
+
+Ao clicar, abrir InfoWindow com:
+
+nome, rating (★ e número), “Open now/Closed”, endereço, link “Ver no Google Maps”;
+
+lista de eventos do Event-U já vinculados a esse place_id (título + link).
+
+Se não houver eventos, mostrar CTA “Criar evento aqui” que preenche o place_id no modal de criação.
+
+Filtros de tipo (Clubs, Bars, Shows, Fairs, Food)
+
+Conectar os botões de filtro a types do Places (night_club, bar, movie_theater|stadium|art_gallery|museum, amusement_park|tourist_attraction|park|campground|cafe, restaurant).
+
+Ao trocar filtro: refazer busca na viewport (debounce) e atualizar markers + heatmap.
+
+UX
+
+Container do mapa com height: calc(100vh - 120px).
+
+Logar erros comuns com [EVENTU:MAP] e exibir toast amigável.
+
+Não instalar libs novas.
+
+Aceite mapa: heatmap visível; markers clicáveis mostram InfoWindow com dados do lugar + eventos; filtros alteram os pontos.
+
+P1 — CRIAR EVENTO (autocomplete de lugares reais)
+
+Campo Location deve usar Google Places Autocomplete.
+
+Ao selecionar um lugar, capturar place_id, name, formatted_address, geometry (lat/lng), rating, user_ratings_total, opening_hours?.isOpen() e salvar/atualizar a entrada em places.
+
+O evento criado deve referenciar esse place_id.
+
+Se usuário digitar e não escolher um lugar do autocomplete, bloquear submit com mensagem clara.
+
+Aceite: digito “IKEA” (ou similar), aparece autocomplete real; seleciono → cria evento vinculado ao lugar; aparece na lista e no InfoWindow.
+
+P2 — SETTINGS → Suporte via e-mail (ou ticket)
+
+Form de suporte deve enviar e-mail para SUPPORT_TO_EMAIL usando SMTP (Nodemailer).
+
+Se SMTP não configurado, criar support_tickets (id, user_id, subject, message, status[open|sent|error], created_at) e mostrar toast de sucesso.
+
+Mostrar confirmação “Support request sent”.
+
+Aceite: envio gera e-mail (quando SMTP presente) ou ticket persistido.
+
+P3 — CLAIM BUSINESS → e-mail + aprovação + visão do dono
+
+Persistência (se ainda não existir):
+
+claims (id, place_id, requester_user_id, method, evidence, status[pending|approved|rejected], reviewed_by, reviewed_at, created_at)
+
+owners (place_id, user_id)
+
+RLS básica: select próprio/insert auth.
+
+Envio
+
+Ao enviar claim, salvar pending.
+
+Se SMTP, enviar e-mail a SUPPORT_TO_EMAIL com dados do claim (place, requester, método, evidência).
+
+Backoffice simples (admin mock)
+
+Rota /admin visível apenas se email logado === SUPPORT_TO_EMAIL ou ?admin=1.
+
+Listar claims pendentes com Approve / Reject.
+
+Ao Approve: inserir em owners e marcar claim approved.
+
+Pós-aprovação (UI do dono)
+
+No Profile, se o usuário estiver em owners, mostrar bloco “Your Business” listando place_id → botão “Open Owner Dashboard”.
+
+Rota /owner/:placeId:
+
+Lista de eventos do local (criar/editar).
+
+KPIs: RSVPs (contagem) e “views” simuladas.
+
+Toggle “Boost 7 days”: seta is_boosted=true, boost_until=now()+7d, boost_level=1.
+
+Aceite: claim vira e-mail/ticket; aprovo em /admin; dono vê “Your Business” e acessa o dashboard com boost.
+
+P4 — CHAT (busca de usuários/estabelecimentos)
+
+Criar/usar tabela profiles (user_id, display_name, email). No login, upsert do perfil com email do auth.
+
+Página Messages:
+
+Search que busca profiles (display_name/email) e eventos do usuário (criados/participados).
+
+Conversa por evento (MVP).
+
+Se Supabase Realtime disponível, habilitar; caso contrário, mock local.
+
+Aceite: consigo buscar por usuário/estabelecimento (via profiles/places) ou por evento; abrir chat do evento.
+
+Guardrails
+
+Sem libs de UI novas; se precisar de e-mail, usar Nodemailer.
+
+Feature flags para SMTP; sem ENV → fallback com tickets.
+
+Não quebrar rotas/telas existentes; reaproveitar estilos.
+
+Comentários // EVENTU: nas mudanças.
+
+Entregáveis
+
+Lista de arquivos criados/alterados + onde plugou cada coisa.
+
+Passo a passo de ENV SMTP e como acessar /admin.
+
+Teste ponta a ponta: filtro → pins/heatmap → criar evento via autocomplete → abrir InfoWindow do lugar → enviar suporte (e-mail/ticket) → claim → aprovar no admin → ver Owner Dashboard → aplicar Boost.
