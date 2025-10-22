@@ -68,6 +68,9 @@ export const events = pgTable("events", {
   mediaUrl: varchar("media_url"), // URL for uploaded images/videos
   mediaType: varchar("media_type"), // image or video
   isActive: boolean("is_active").default(true),
+  isBoosted: boolean("is_boosted").default(false), // EVENTU: Event promotion/boost status
+  boostUntil: timestamp("boost_until"), // EVENTU: When boost expires (optional)
+  boostLevel: integer("boost_level").default(1), // EVENTU: Boost intensity level (1-3)
   createdAt: timestamp("created_at").defaultNow(),
 });
 
