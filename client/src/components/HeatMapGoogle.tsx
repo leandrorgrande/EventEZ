@@ -120,11 +120,104 @@ export default function HeatMapGoogle({
         return;
       }
 
-      // EVENTU: P0 - Initialize map without mapId and with minimal config first
+      // EVENTU: Dark theme styles for the map
+      const darkMapStyles = [
+        { elementType: "geometry", stylers: [{ color: "#212121" }] },
+        { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+        { elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
+        { elementType: "labels.text.stroke", stylers: [{ color: "#212121" }] },
+        {
+          featureType: "administrative",
+          elementType: "geometry",
+          stylers: [{ color: "#757575" }],
+        },
+        {
+          featureType: "administrative.country",
+          elementType: "labels.text.fill",
+          stylers: [{ color: "#9e9e9e" }],
+        },
+        {
+          featureType: "administrative.land_parcel",
+          stylers: [{ visibility: "off" }],
+        },
+        {
+          featureType: "administrative.locality",
+          elementType: "labels.text.fill",
+          stylers: [{ color: "#bdbdbd" }],
+        },
+        {
+          featureType: "poi",
+          elementType: "labels.text.fill",
+          stylers: [{ color: "#757575" }],
+        },
+        {
+          featureType: "poi.park",
+          elementType: "geometry",
+          stylers: [{ color: "#181818" }],
+        },
+        {
+          featureType: "poi.park",
+          elementType: "labels.text.fill",
+          stylers: [{ color: "#616161" }],
+        },
+        {
+          featureType: "poi.park",
+          elementType: "labels.text.stroke",
+          stylers: [{ color: "#1b1b1b" }],
+        },
+        {
+          featureType: "road",
+          elementType: "geometry.fill",
+          stylers: [{ color: "#2c2c2c" }],
+        },
+        {
+          featureType: "road",
+          elementType: "labels.text.fill",
+          stylers: [{ color: "#8a8a8a" }],
+        },
+        {
+          featureType: "road.arterial",
+          elementType: "geometry",
+          stylers: [{ color: "#373737" }],
+        },
+        {
+          featureType: "road.highway",
+          elementType: "geometry",
+          stylers: [{ color: "#3c3c3c" }],
+        },
+        {
+          featureType: "road.highway.controlled_access",
+          elementType: "geometry",
+          stylers: [{ color: "#4e4e4e" }],
+        },
+        {
+          featureType: "road.local",
+          elementType: "labels.text.fill",
+          stylers: [{ color: "#616161" }],
+        },
+        {
+          featureType: "transit",
+          elementType: "labels.text.fill",
+          stylers: [{ color: "#757575" }],
+        },
+        {
+          featureType: "water",
+          elementType: "geometry",
+          stylers: [{ color: "#000000" }],
+        },
+        {
+          featureType: "water",
+          elementType: "labels.text.fill",
+          stylers: [{ color: "#3d3d3d" }],
+        },
+      ];
+
+      // EVENTU: Initialize map with dark theme
       mapRef.current = new google.maps.Map(mapContainerRef.current, {
         center: { lat: 40.7589, lng: -73.9851 }, // NYC - Times Square
         zoom: 14,
         mapTypeId: google.maps.MapTypeId.ROADMAP,
+        styles: darkMapStyles, // EVENTU: Apply dark theme
         disableDefaultUI: false,
         zoomControl: true,
         mapTypeControl: false,
@@ -405,12 +498,76 @@ export default function HeatMapGoogle({
         animation: isBoosted ? google.maps.Animation.BOUNCE : null,
       });
 
-      // EVENTU: Add click listener
+      // EVENTU: Create custom info window content
+      const formatTime = (dateStr: string) => {
+        try {
+          const date = new Date(dateStr);
+          return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        } catch {
+          return dateStr;
+        }
+      };
+
+      const infoContent = `
+        <div style="padding: 12px; max-width: 250px; font-family: system-ui, -apple-system, sans-serif; color: #111;">
+          <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: ${markerColor};">
+            ${event.title || 'Event'}
+          </h3>
+          ${event.description ? `
+            <p style="margin: 0 0 8px 0; font-size: 13px; color: #555; line-height: 1.4;">
+              ${event.description.substring(0, 100)}${event.description.length > 100 ? '...' : ''}
+            </p>
+          ` : ''}
+          <div style="font-size: 13px; color: #666; margin-top: 8px;">
+            ${event.location?.name ? `
+              <div style="margin-bottom: 4px;">
+                📍 <strong>${event.location.name}</strong>
+              </div>
+            ` : ''}
+            ${event.startTime ? `
+              <div style="margin-bottom: 4px;">
+                🕒 ${formatTime(event.startTime)}${event.endTime ? ` - ${formatTime(event.endTime)}` : ''}
+              </div>
+            ` : ''}
+            ${event.eventType ? `
+              <div style="margin-bottom: 4px;">
+                🎉 ${event.eventType.charAt(0).toUpperCase() + event.eventType.slice(1)}
+              </div>
+            ` : ''}
+            ${isBoosted ? `
+              <div style="margin-top: 8px; padding: 4px 8px; background: ${markerColor}20; border-radius: 4px; font-weight: 600; color: ${markerColor};">
+                ⭐ Boosted Event
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+
+      // EVENTU: Create info window
+      const infoWindow = new google.maps.InfoWindow({
+        content: infoContent,
+      });
+
+      // EVENTU: Add click listener to show info window
       marker.addListener("click", () => {
+        // Close any open info windows
+        markersRef.current.forEach((m: any) => {
+          if (m.infoWindow) {
+            m.infoWindow.close();
+          }
+        });
+        
+        // Open this info window
+        infoWindow.open(mapRef.current, marker);
+        
+        // Optionally also trigger event selection
         if (onEventSelect) {
           onEventSelect(event);
         }
       });
+
+      // EVENTU: Store info window reference with marker
+      (marker as any).infoWindow = infoWindow;
 
       markersRef.current.push(marker);
     });
