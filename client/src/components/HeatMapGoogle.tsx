@@ -290,6 +290,45 @@ export default function HeatMapGoogle({
             });
           }
 
+          // EVENTU: TEMPORARY DEMO DATA - Add hotspots around Manhattan to visualize heatmap
+          // TODO: Remove when Google Places API starts working
+          const demoHotspots = [
+            // Times Square area (high activity)
+            { lat: 40.758, lng: -73.9855, weight: 1.5 },
+            { lat: 40.7589, lng: -73.9851, weight: 1.3 },
+            { lat: 40.7575, lng: -73.986, weight: 1.2 },
+            
+            // Greenwich Village (medium-high activity)
+            { lat: 40.7335, lng: -74.0027, weight: 1.0 },
+            { lat: 40.7342, lng: -74.0015, weight: 0.9 },
+            
+            // Lower East Side (medium activity)
+            { lat: 40.7209, lng: -73.9862, weight: 0.8 },
+            { lat: 40.7198, lng: -73.9875, weight: 0.7 },
+            
+            // Chelsea (medium activity)
+            { lat: 40.7465, lng: -74.0014, weight: 0.9 },
+            { lat: 40.7455, lng: -74.0025, weight: 0.8 },
+            
+            // Union Square (high activity)
+            { lat: 40.7359, lng: -73.9911, weight: 1.2 },
+            { lat: 40.7368, lng: -73.9906, weight: 1.1 },
+            
+            // SoHo (medium activity)
+            { lat: 40.7233, lng: -74.0030, weight: 0.9 },
+            
+            // East Village (medium-high activity)
+            { lat: 40.7265, lng: -73.9815, weight: 1.0 },
+            { lat: 40.7273, lng: -73.9822, weight: 0.95 }
+          ];
+          
+          demoHotspots.forEach(spot => {
+            heatmapData.push({
+              location: new google.maps.LatLng(spot.lat, spot.lng),
+              weight: spot.weight
+            });
+          });
+
           console.log('[EVENTU:MAP] Heatmap data points:', heatmapData.length); // EVENTU: Debug log
 
           // EVENTU: Create or update heatmap layer
@@ -301,16 +340,17 @@ export default function HeatMapGoogle({
             heatmapLayerRef.current = new google.maps.visualization.HeatmapLayer({
               data: heatmapData,
               map: mapRef.current,
-              radius: 40, // EVENTU: Increased radius for better visibility
-              opacity: 0.8, // EVENTU: Increased opacity
-              maxIntensity: 2, // EVENTU: Added max intensity
+              radius: 50, // EVENTU: Larger radius for prominent blobs
+              opacity: 0.7, // EVENTU: Good visibility on dark theme
+              maxIntensity: 2, // EVENTU: Max intensity for hotspots
               gradient: [
-                'rgba(0, 0, 255, 0)',
-                'rgba(59, 130, 246, 1)',
-                'rgba(16, 185, 129, 1)',
-                'rgba(245, 158, 11, 1)',
-                'rgba(249, 115, 22, 1)',
-                'rgba(239, 68, 68, 1)'
+                'rgba(0, 0, 0, 0)', // EVENTU: Transparent at edges
+                'rgba(0, 51, 102, 0.6)', // EVENTU: Dark blue (low activity)
+                'rgba(0, 102, 204, 0.8)', // EVENTU: Medium blue
+                'rgba(16, 185, 129, 1)', // EVENTU: Cyan/teal (medium activity)
+                'rgba(245, 158, 11, 1)', // EVENTU: Yellow/amber (high activity)
+                'rgba(249, 115, 22, 1)', // EVENTU: Orange (very high)
+                'rgba(239, 68, 68, 1)' // EVENTU: Red (hottest spots)
               ]
             });
             console.log('[EVENTU:MAP] Heatmap layer created successfully'); // EVENTU: Debug log
