@@ -7,19 +7,40 @@ interface HeatMapGoogleProps {
   events?: any[];
   isLoading?: boolean;
   onEventSelect?: (event: any) => void;
+  currentFilter?: string; // EVENTU: P0 - Filter for place types
+  onCreateEventAtPlace?: (placeId: string, placeName: string, lat: number, lng: number) => void; // EVENTU: P0 - Create event callback
 }
 
 // EVENTU: Flag for future internal heatmap logic combining with Google signals
 const USE_INTERNAL_HEATMAP_LOGIC = false;
 
-export default function HeatMapGoogle({ data, events, isLoading, onEventSelect }: HeatMapGoogleProps) {
+// EVENTU: P0 - Map event types to Google Places types
+const FILTER_TO_PLACES_TYPES: Record<string, string[]> = {
+  clubs: ['night_club'],
+  bars: ['bar'],
+  shows: ['movie_theater', 'stadium', 'art_gallery', 'museum'],
+  fairs: ['amusement_park', 'tourist_attraction', 'park', 'campground'],
+  food: ['restaurant', 'cafe'],
+  all: ['restaurant', 'bar', 'night_club', 'cafe', 'food']
+};
+
+export default function HeatMapGoogle({ 
+  data, 
+  events, 
+  isLoading, 
+  onEventSelect, 
+  currentFilter = 'all',
+  onCreateEventAtPlace 
+}: HeatMapGoogleProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const [googleMapsLoaded, setGoogleMapsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const heatmapLayerRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
+  const placeMarkersRef = useRef<any[]>([]); // EVENTU: P0 - Separate markers for places
   const placesServiceRef = useRef<any>(null);
+  const infoWindowRef = useRef<any>(null); // EVENTU: P0 - InfoWindow reference
 
   // EVENTU: Load Google Maps with Places and Visualization libraries
   useEffect(() => {
@@ -111,12 +132,12 @@ export default function HeatMapGoogle({ data, events, isLoading, onEventSelect }
     };
   }, [googleMapsLoaded]);
 
-  // EVENTU: Update heatmap when data changes
+  // EVENTU: Update heatmap when data or filter changes
   useEffect(() => {
     if (mapRef.current && googleMapsLoaded) {
       loadGoogleBasedHeatmap();
     }
-  }, [data, googleMapsLoaded]);
+  }, [data, googleMapsLoaded, currentFilter]);
 
   // EVENTU: Update event markers when events change
   useEffect(() => {
@@ -136,11 +157,14 @@ export default function HeatMapGoogle({ data, events, isLoading, onEventSelect }
     // Search for active locations in the current viewport
     const center = mapRef.current.getCenter();
     
-    // EVENTU: Query nearby places using Google Places API
+    // EVENTU: P0 - Get types based on current filter
+    const types = FILTER_TO_PLACES_TYPES[currentFilter] || FILTER_TO_PLACES_TYPES.all;
+    
+    // EVENTU: Query nearby places using Google Places API with filter
     const request = {
       location: center,
       radius: 5000, // 5km radius
-      type: ['restaurant', 'bar', 'night_club', 'cafe', 'food']
+      type: types
     };
 
     if (placesServiceRef.current) {

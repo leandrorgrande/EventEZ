@@ -124,6 +124,7 @@ export default function Map() {
           events={events as any[]}
           isLoading={liveLoading || predictionLoading || eventsLoading}
           onEventSelect={setSelectedEvent}
+          currentFilter={currentFilter} // EVENTU: P0 - Pass filter to map
         />
       </div>
 
