@@ -203,24 +203,25 @@ export default function HeatMapGoogle({
 
     if (placesServiceRef.current) {
       placesServiceRef.current.nearbySearch(request, (results: any[], status: any) => {
-        console.log('[EVENTU:MAP] Places API callback executed!'); // EVENTU: Debug log
-        console.log('[EVENTU:MAP] Places API response status:', status); // EVENTU: Debug log
-        console.log('[EVENTU:MAP] Places API results count:', results?.length || 0); // EVENTU: Debug log
-        
-        // EVENTU: Log detailed error information
-        if (status !== google.maps.places.PlacesServiceStatus.OK) {
-          console.error('[EVENTU:MAP] Places API ERROR - Status:', status); // EVENTU: Debug log
-          console.error('[EVENTU:MAP] Possible causes:'); // EVENTU: Debug log
-          console.error('[EVENTU:MAP] - ZERO_RESULTS: No places found'); // EVENTU: Debug log
-          console.error('[EVENTU:MAP] - OVER_QUERY_LIMIT: Too many requests'); // EVENTU: Debug log
-          console.error('[EVENTU:MAP] - REQUEST_DENIED: API key issue or billing not enabled'); // EVENTU: Debug log
-          console.error('[EVENTU:MAP] - INVALID_REQUEST: Bad request parameters'); // EVENTU: Debug log
-          console.error('[EVENTU:MAP] - UNKNOWN_ERROR: Server error, try again'); // EVENTU: Debug log
-          return; // EVENTU: Exit early on error
-        }
-        
-        if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-          console.log('[EVENTU:MAP] Places found:', results.length); // EVENTU: Debug log
+        try {
+          console.log('[EVENTU:MAP] Places API callback executed!'); // EVENTU: Debug log
+          console.log('[EVENTU:MAP] Places API response status:', status); // EVENTU: Debug log
+          console.log('[EVENTU:MAP] Places API results count:', results?.length || 0); // EVENTU: Debug log
+          
+          // EVENTU: Log detailed error information
+          if (status !== google.maps.places.PlacesServiceStatus.OK) {
+            console.error('[EVENTU:MAP] Places API ERROR - Status:', status); // EVENTU: Debug log
+            console.error('[EVENTU:MAP] Possible causes:'); // EVENTU: Debug log
+            console.error('[EVENTU:MAP] - ZERO_RESULTS: No places found'); // EVENTU: Debug log
+            console.error('[EVENTU:MAP] - OVER_QUERY_LIMIT: Too many requests'); // EVENTU: Debug log
+            console.error('[EVENTU:MAP] - REQUEST_DENIED: API key issue or billing not enabled'); // EVENTU: Debug log
+            console.error('[EVENTU:MAP] - INVALID_REQUEST: Bad request parameters'); // EVENTU: Debug log
+            console.error('[EVENTU:MAP] - UNKNOWN_ERROR: Server error, try again'); // EVENTU: Debug log
+            return; // EVENTU: Exit early on error
+          }
+          
+          if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+            console.log('[EVENTU:MAP] Places found:', results.length); // EVENTU: Debug log
           
           results.forEach((place: any) => {
             if (place.geometry?.location) {
@@ -302,8 +303,13 @@ export default function HeatMapGoogle({
           } else {
             console.warn('[EVENTU:MAP] No heatmap data to display'); // EVENTU: Debug log
           }
-        } else {
-          console.error('[EVENTU:MAP] Places search failed with status:', status); // EVENTU: Debug log
+          } else {
+            console.error('[EVENTU:MAP] Places search failed with status:', status); // EVENTU: Debug log
+          }
+        } catch (error) {
+          // EVENTU: Catch any errors in the Places API callback
+          console.error('[EVENTU:MAP] ERROR in Places API callback:', error); // EVENTU: Debug log
+          console.error('[EVENTU:MAP] Error details:', JSON.stringify(error, null, 2)); // EVENTU: Debug log
         }
       });
     } else {
