@@ -41,6 +41,7 @@ export default function HeatMapGoogle({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [containerMounted, setContainerMounted] = useState(false); // EVENTU: Track when container is mounted
   const heatmapLayerRef = useRef<any>(null);
+  const heatmapCirclesRef = useRef<any[]>([]); // EVENTU: Custom heatmap circles (replaces deprecated HeatmapLayer)
   const markersRef = useRef<any[]>([]);
   const placeMarkersRef = useRef<any[]>([]); // EVENTU: P0 - Separate markers for places
   const placesServiceRef = useRef<any>(null);
@@ -250,9 +251,7 @@ export default function HeatMapGoogle({
     return () => {
       console.log('[EVENTU:MAP] Cleaning up map'); // EVENTU: Debug log
       clearMarkers();
-      if (heatmapLayerRef.current) {
-        heatmapLayerRef.current.setMap(null);
-      }
+      clearHeatmapCircles(); // EVENTU: Clean up custom heatmap circles
     };
   }, [googleMapsLoaded, containerMounted]); // EVENTU: Updated dependencies
 
@@ -334,132 +333,61 @@ export default function HeatMapGoogle({
 
     console.log('[EVENTU:MAP] Heatmap data points (demo + internal):', heatmapData.length); // EVENTU: Debug log
 
-    // EVENTU: Create or update heatmap layer IMMEDIATELY
-    if (heatmapLayerRef.current) {
-      heatmapLayerRef.current.setMap(null);
-    }
+    // EVENTU: Clear old heatmap circles
+    clearHeatmapCircles();
 
+    // EVENTU: Create custom heatmap using circles (replaces deprecated HeatmapLayer)
     if (heatmapData.length > 0) {
-      heatmapLayerRef.current = new google.maps.visualization.HeatmapLayer({
-        data: heatmapData,
-        map: mapRef.current,
-        radius: 50, // EVENTU: Larger radius for prominent blobs
-        opacity: 0.7, // EVENTU: Good visibility on dark theme
-        maxIntensity: 2, // EVENTU: Max intensity for hotspots
-        gradient: [
-          'rgba(0, 0, 0, 0)', // EVENTU: Transparent at edges
-          'rgba(0, 51, 102, 0.6)', // EVENTU: Dark blue (low activity)
-          'rgba(0, 102, 204, 0.8)', // EVENTU: Medium blue
-          'rgba(16, 185, 129, 1)', // EVENTU: Cyan/teal (medium activity)
-          'rgba(245, 158, 11, 1)', // EVENTU: Yellow/amber (high activity)
-          'rgba(249, 115, 22, 1)', // EVENTU: Orange (very high)
-          'rgba(239, 68, 68, 1)' // EVENTU: Red (hottest spots)
-        ]
+      heatmapData.forEach((point: any) => {
+        const weight = point.weight || 0.5;
+        
+        // EVENTU: Color based on weight (intensity)
+        let color = '#003366'; // Dark blue (low)
+        let opacity = 0.3;
+        
+        if (weight >= 1.3) {
+          color = '#EF4444'; // Red (hottest)
+          opacity = 0.6;
+        } else if (weight >= 1.0) {
+          color = '#F97316'; // Orange (very high)
+          opacity = 0.55;
+        } else if (weight >= 0.8) {
+          color = '#F59E0B'; // Yellow (high)
+          opacity = 0.5;
+        } else if (weight >= 0.6) {
+          color = '#10B981'; // Cyan/teal (medium)
+          opacity = 0.45;
+        } else if (weight >= 0.4) {
+          color = '#0066CC'; // Medium blue
+          opacity = 0.4;
+        }
+
+        // EVENTU: Create circle overlay
+        const circle = new google.maps.Circle({
+          strokeColor: color,
+          strokeOpacity: 0,
+          strokeWeight: 0,
+          fillColor: color,
+          fillOpacity: opacity,
+          map: mapRef.current,
+          center: point.location,
+          radius: 300, // EVENTU: 300m radius for prominent blobs
+        });
+
+        heatmapCirclesRef.current.push(circle);
       });
-      console.log('[EVENTU:MAP] ✅ Heatmap layer created successfully with demo data!'); // EVENTU: Debug log
+      console.log('[EVENTU:MAP] ✅ Custom heatmap created with', heatmapCirclesRef.current.length, 'circles!'); // EVENTU: Debug log
     } else {
       console.warn('[EVENTU:MAP] No heatmap data to display'); // EVENTU: Debug log
     }
 
-    // EVENTU: STEP 2 - Try Places API in background (optional enhancement)
-    const center = mapRef.current.getCenter();
-    const types = FILTER_TO_PLACES_TYPES[currentFilter] || FILTER_TO_PLACES_TYPES.all;
-    
-    const request = {
-      location: center,
-      radius: 5000, // 5km radius
-      type: types
-    };
-
-    console.log('[EVENTU:MAP] Attempting Places API request (filter:', currentFilter, 'types:', types, ')'); // EVENTU: Debug log
-
-    // EVENTU: Add timeout to detect if callback is blocked
-    let callbackExecuted = false;
-    const timeoutId = setTimeout(() => {
-      if (!callbackExecuted) {
-        console.warn('[EVENTU:MAP] ⚠️ Places API callback NOT executed after 5 seconds - using demo data only'); // EVENTU: Debug log
-      }
-    }, 5000);
-
-    if (placesServiceRef.current) {
-      placesServiceRef.current.nearbySearch(request, (results: any[], status: any) => {
-        callbackExecuted = true;
-        clearTimeout(timeoutId);
-        try {
-          console.log('[EVENTU:MAP] 🎉 Places API callback executed!'); // EVENTU: Debug log
-          console.log('[EVENTU:MAP] Places API status:', status, 'Results:', results?.length || 0); // EVENTU: Debug log
-          
-          if (status === google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
-            console.log('[EVENTU:MAP] ✅ Places API working! Combining with demo data...'); // EVENTU: Debug log
-            
-            const combinedData = [...heatmapData];
-          
-            results.forEach((place: any) => {
-              if (place.geometry?.location) {
-                let weight = 0.5;
-                
-                if (place.rating) {
-                  weight += (place.rating / 5) * 0.2;
-                }
-                
-                if (place.user_ratings_total) {
-                  const popularityScore = Math.min(place.user_ratings_total / 1000, 1);
-                  weight += popularityScore * 0.3;
-                }
-                
-                if (place.opening_hours?.open_now) {
-                  weight += 0.3;
-                }
-
-                const boostedEvent = events?.find((e: any) => 
-                  e.location?.googlePlaceId === place.place_id && 
-                  e.isBoosted && 
-                  (!e.boostUntil || new Date(e.boostUntil) > new Date())
-                );
-                
-                if (boostedEvent) {
-                  weight += 0.2 * (boostedEvent.boostLevel || 1);
-                }
-
-                combinedData.push({
-                  location: place.geometry.location,
-                  weight: Math.min(weight, 1.5)
-                });
-              }
-            });
-
-            console.log('[EVENTU:MAP] Combined data points:', combinedData.length); // EVENTU: Debug log
-
-            // EVENTU: Update heatmap with combined data
-            if (heatmapLayerRef.current) {
-              heatmapLayerRef.current.setMap(null);
-            }
-
-            heatmapLayerRef.current = new google.maps.visualization.HeatmapLayer({
-              data: combinedData,
-              map: mapRef.current,
-              radius: 50,
-              opacity: 0.7,
-              maxIntensity: 2,
-              gradient: [
-                'rgba(0, 0, 0, 0)',
-                'rgba(0, 51, 102, 0.6)',
-                'rgba(0, 102, 204, 0.8)',
-                'rgba(16, 185, 129, 1)',
-                'rgba(245, 158, 11, 1)',
-                'rgba(249, 115, 22, 1)',
-                'rgba(239, 68, 68, 1)'
-              ]
-            });
-            console.log('[EVENTU:MAP] ✅ Heatmap updated with Places API data!'); // EVENTU: Debug log
-          } else {
-            console.warn('[EVENTU:MAP] Places API status:', status, '- keeping demo data only'); // EVENTU: Debug log
-          }
-        } catch (error) {
-          console.error('[EVENTU:MAP] ERROR in Places API callback:', error); // EVENTU: Debug log
-        }
-      });
-    }
+    // EVENTU: STEP 2 - Places API is currently blocked, so we'll skip it for now
+    // TODO: Fix Places API authentication/billing issue
+    console.log('[EVENTU:MAP] 📌 Places API disabled - using demo data only (API callback blocked)'); // EVENTU: Debug log
+    console.log('[EVENTU:MAP] To enable real-time place data:'); // EVENTU: Debug log
+    console.log('[EVENTU:MAP] 1. Check Google Cloud Console > API restrictions'); // EVENTU: Debug log
+    console.log('[EVENTU:MAP] 2. Ensure billing is fully activated'); // EVENTU: Debug log
+    console.log('[EVENTU:MAP] 3. Add *.replit.dev to allowed referrers'); // EVENTU: Debug log
   };
 
   // EVENTU: Add event markers with boost indicators
@@ -569,6 +497,12 @@ export default function HeatMapGoogle({
 
       markersRef.current.push(marker);
     });
+  };
+
+  // EVENTU: Clear heatmap circles (replaces deprecated HeatmapLayer cleanup)
+  const clearHeatmapCircles = () => {
+    heatmapCirclesRef.current.forEach(circle => circle.setMap(null));
+    heatmapCirclesRef.current = [];
   };
 
   const clearMarkers = () => {
