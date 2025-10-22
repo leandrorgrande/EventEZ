@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import HeatMap from "@/components/HeatMap";
+import HeatMapGoogle from "@/components/HeatMapGoogle"; // EVENTU: Switched to Google Maps
 import FilterBar from "@/components/FilterBar";
 import BottomNavigation from "@/components/BottomNavigation";
 import CreateEventModal from "@/components/CreateEventModal";
@@ -117,9 +117,9 @@ export default function Map() {
 
   return (
     <div className="h-screen w-screen relative bg-slate-900 overflow-hidden">
-      {/* Map Container */}
+      {/* Map Container - EVENTU: Now using Google Maps */}
       <div className="absolute inset-0 z-0">
-        <HeatMap
+        <HeatMapGoogle
           data={isLiveMode ? (liveHeatmapData as any[]) : (predictionHeatmapData as any[])}
           events={events as any[]}
           isLoading={liveLoading || predictionLoading || eventsLoading}
