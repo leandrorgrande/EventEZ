@@ -1,0 +1,92 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is owner
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'admin';
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && request.auth.uid == userId;
+      allow delete: if isAdmin();
+    }
+
+    // Events collection
+    match /events/{eventId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && 
+        (resource.data.creatorId == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && 
+        (resource.data.creatorId == request.auth.uid || isAdmin());
+    }
+
+    // Event attendees
+    match /eventAttendees/{attendeeId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    // Places collection
+    match /places/{placeId} {
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    // Locations collection
+    match /locations/{locationId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated();
+    }
+
+    // Messages collection
+    match /messages/{messageId} {
+      allow read: if isAuthenticated() && 
+        (request.auth.uid == resource.data.senderId || 
+         request.auth.uid == resource.data.receiverId);
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.senderId;
+      allow update: if isAuthenticated() && 
+        (request.auth.uid == resource.data.senderId || 
+         request.auth.uid == resource.data.receiverId);
+      allow delete: if isAuthenticated();
+    }
+
+    // Heatmap data
+    match /heatmapData/{dataId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // Business claims
+    match /businessClaims/{claimId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // Checkins
+    match /checkins/{checkinId} {
+      allow read: if true;
+      allow create: if true; // Allow anonymous check-ins
+      allow update, delete: if isAuthenticated();
+    }
+  }
+}

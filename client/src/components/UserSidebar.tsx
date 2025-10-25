@@ -11,6 +11,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { Settings, History, Store, LogOut, Calendar, Users, X } from "lucide-react";
+import { signOutUser } from "@/lib/firebase";
+import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 
 interface UserSidebarProps {
   open: boolean;
@@ -19,9 +22,24 @@ interface UserSidebarProps {
 
 export default function UserSidebar({ open, onOpenChange }: UserSidebarProps) {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
-  const handleLogout = () => {
-    window.location.href = "/api/logout";
+  const handleLogout = async () => {
+    try {
+      await signOutUser();
+      toast({
+        title: "Logout realizado com sucesso!",
+        description: "Até logo!",
+      });
+      setLocation("/");
+    } catch (error: any) {
+      toast({
+        title: "Erro ao fazer logout",
+        description: error.message || "Tente novamente",
+        variant: "destructive",
+      });
+    }
   };
 
   if (!user) return null;

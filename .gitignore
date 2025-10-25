@@ -1,6 +1,14 @@
 node_modules
 dist
 .DS_Store
-server/public
-vite.config.ts.*
-*.tar.gz
+.env
+.env.local
+.env.production
+.replit
+replit.nix
+.cache
+.local
+*.log
+*.tsbuildinfo
+.vscode
+.idea

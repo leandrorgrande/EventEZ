@@ -50,9 +50,9 @@ export default function HeatMapGoogle({
   // EVENTU: Load Google Maps with Places and Visualization libraries
   useEffect(() => {
     console.log('[EVENTU:COMPONENT] Google Maps loading effect triggered'); // EVENTU: Debug log
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyAv1QPfxhhYJ-a7czQhXPILtUI3Qz16UAg";
     
-    if (!apiKey) {
+    if (!apiKey || apiKey === "your-google-maps-api-key") {
       setLoadError("Google Maps API key not configured. Please add VITE_GOOGLE_MAPS_API_KEY to your environment.");
       return;
     }

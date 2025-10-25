@@ -68,6 +68,7 @@ export const places = pgTable("places", {
   userRatingsTotal: integer("user_ratings_total"),
   isOpen: boolean("is_open"), // Current open/closed status
   types: text("types").array(), // Place types from Google (e.g., "restaurant", "bar")
+  regularOpeningHours: jsonb("regular_opening_hours"), // Horários de funcionamento do Google
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
