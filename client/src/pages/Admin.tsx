@@ -22,18 +22,33 @@ import {
 } from "lucide-react";
 
 export default function Admin() {
-  const { user } = useAuth();
+  const { userProfile, isLoading: authLoading, isAdmin } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+        <div className="text-center">
+          <Shield className="h-16 w-16 text-blue-400 mx-auto mb-4 animate-pulse" />
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Check if user is admin
-  if (!user || user.userType !== "admin") {
+  if (!isAdmin) {
     return (
       <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
         <div className="text-center">
           <Shield className="h-16 w-16 text-red-400 mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-4">Access Denied</h2>
-          <p className="text-gray-400 mb-6">This page is restricted to administrators only.</p>
+          <p className="text-gray-400 mb-2">This page is restricted to administrators only.</p>
+          <p className="text-sm text-yellow-400 mb-6">
+            Your user type: {userProfile?.userType || 'none'}
+          </p>
           <Button onClick={() => window.location.href = "/"}>
             Go to Home
           </Button>
