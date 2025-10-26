@@ -126,7 +126,13 @@ app.get('/events', async (req, res) => {
         let events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         // Filtrar por approvalStatus (se não especificado, retorna apenas aprovados por padrão)
         if (approvalStatus) {
-            events = events.filter((e) => e.approvalStatus === approvalStatus);
+            if (approvalStatus === 'all') {
+                // Retornar TODOS os eventos (admin)
+                // Não aplicar filtro
+            }
+            else {
+                events = events.filter((e) => e.approvalStatus === approvalStatus);
+            }
         }
         else {
             // Por padrão, retornar apenas eventos aprovados

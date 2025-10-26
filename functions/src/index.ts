@@ -419,24 +419,29 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
           if (!dayHours || dayHours.closed) {
             // Fechado o dia todo
             popularTimes[day] = Array(24).fill(0);
+            console.log(`[API] ${day}: FECHADO o dia todo`);
           } else if (dayHours.open && dayHours.close) {
             // Zerar horários fora do funcionamento
             const openHour = parseInt(dayHours.open.split(':')[0]);
             const closeHour = parseInt(dayHours.close.split(':')[0]);
             
+            let zeroedHours = 0;
             for (let hour = 0; hour < 24; hour++) {
               if (closeHour > openHour) {
                 // Horário normal (ex: 10:00 - 22:00)
                 if (hour < openHour || hour >= closeHour) {
                   popularTimes[day][hour] = 0;
+                  zeroedHours++;
                 }
               } else {
                 // Cruza meia-noite (ex: 18:00 - 02:00)
                 if (hour >= closeHour && hour < openHour) {
                   popularTimes[day][hour] = 0;
+                  zeroedHours++;
                 }
               }
             }
+            console.log(`[API] ${day}: ${dayHours.open} - ${dayHours.close} (zerou ${zeroedHours} horas)`);
           }
         });
       }
@@ -469,7 +474,9 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
       
-      console.log('[API] Salvando lugar:', place.displayName?.text, 'com horários:', openingHours ? 'SIM' : 'NÃO');
+      console.log('[API] Salvando lugar:', place.displayName?.text);
+      console.log('[API] Horários extraídos:', openingHours ? JSON.stringify(openingHours, null, 2) : 'NÃO');
+      console.log('[API] Popular Times gerados:', popularTimes ? 'SIM' : 'NÃO');
 
       const existingQuery = await db.collection('places')
         .where('placeId', '==', place.id)
