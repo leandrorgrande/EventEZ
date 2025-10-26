@@ -58,7 +58,7 @@ export default function BottomNavigation({ currentPage, onNavigate }: BottomNavi
   }
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 z-20 bg-slate-800/90 backdrop-blur-md border-t border-slate-700">
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-800/95 backdrop-blur-md border-t border-slate-700 shadow-lg">
       <div className="flex items-center justify-around py-2">
         {navItems.map((item) => {
           const Icon = item.icon;

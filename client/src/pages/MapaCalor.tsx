@@ -601,12 +601,13 @@ export default function MapaCalor() {
           </>
         )}
 
-        {/* Navegação - Sempre visível */}
-        <BottomNavigation currentPage="map" onNavigate={() => {}} />
       </div>
+      
+      {/* Mapa - Altura otimizada para mobile com espaço para navegação fixa */}
+      <div ref={mapRef} className="flex-1 w-full min-h-[60vh] md:min-h-0 mb-16" />
 
-      {/* Mapa - Altura otimizada para mobile */}
-      <div ref={mapRef} className="flex-1 w-full min-h-[60vh] md:min-h-0" />
+      {/* Navegação Fixa - Sempre visível na parte inferior */}
+      <BottomNavigation currentPage="map" onNavigate={() => {}} />
 
       {/* Lista de Lugares - Abaixo do mapa */}
       {filteredPlaces && filteredPlaces.length > 0 && (
