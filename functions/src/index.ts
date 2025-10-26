@@ -1,7 +1,7 @@
-import * as functions from "firebase-functions";
+import { onRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
-import * as express from "express";
-import * as cors from "cors";
+import express from "express";
+import cors from "cors";
 
 admin.initializeApp();
 
@@ -10,11 +10,12 @@ app.use(cors({ origin: true }));
 app.use(express.json());
 
 // Middleware de autenticação
-const authenticate = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+const authenticate = async (req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> => {
   const authHeader = req.headers.authorization;
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: "Unauthorized" });
+    res.status(401).json({ message: "Unauthorized" });
+    return;
   }
 
   const token = authHeader.split('Bearer ')[1];
@@ -24,7 +25,7 @@ const authenticate = async (req: express.Request, res: express.Response, next: e
     (req as any).user = decodedToken;
     next();
   } catch (error) {
-    return res.status(401).json({ message: "Unauthorized" });
+    res.status(401).json({ message: "Unauthorized" });
   }
 };
 
@@ -33,13 +34,14 @@ const db = admin.firestore();
 
 // ============ USERS ============
 
-app.get('/users/:id', authenticate, async (req: express.Request, res: express.Response) => {
+app.get('/users/:id', authenticate, async (req: express.Request, res: express.Response): Promise<void> => {
   try {
     const { id } = req.params;
     const userDoc = await db.collection('users').doc(id).get();
     
     if (!userDoc.exists) {
-      return res.status(404).json({ message: "User not found" });
+      res.status(404).json({ message: "User not found" });
+      return;
     }
     
     res.json({ id: userDoc.id, ...userDoc.data() });
@@ -104,13 +106,15 @@ app.get('/places', async (req: express.Request, res: express.Response) => {
   }
 });
 
-app.post('/places/search-santos', authenticate, async (req: express.Request, res: express.Response) => {
+app.post('/places/search-santos', authenticate, async (req: express.Request, res: express.Response): Promise<void> => {
   try {
     const { locationType = 'bar' } = req.body;
     
-    const apiKey = functions.config().google?.maps_api_key;
+    // Use environment variable instead of functions.config()
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY || "AIzaSyAv1QPfxhhYJ-a7czQhXPILtUI3Qz16UAg";
     if (!apiKey) {
-      return res.status(500).json({ message: "Google Maps API key not configured" });
+      res.status(500).json({ message: "Google Maps API key not configured" });
+      return;
     }
 
     // Santos coordinates
@@ -151,7 +155,8 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
     });
 
     if (!response.ok) {
-      return res.status(response.status).json({ message: "Failed to search places" });
+      res.status(response.status).json({ message: "Failed to search places" });
+      return;
     }
 
     const data = await response.json();
@@ -196,4 +201,4 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
 });
 
 // Export all functions
-export const api = functions.region('us-central1').https.onRequest(app);
+export const api = onRequest({ region: 'us-central1' }, app);

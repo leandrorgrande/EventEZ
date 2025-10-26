@@ -46,7 +46,8 @@ export default function MapaCalor() {
   const { data: places, isLoading, refetch } = useQuery<Place[]>({
     queryKey: ['/api/places'],
     queryFn: async () => {
-      const response = await fetch('/api/places');
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const response = await fetch(`${API_URL}/places`);
       if (!response.ok) throw new Error('Failed to fetch places');
       return response.json();
     },
@@ -58,7 +59,8 @@ export default function MapaCalor() {
       console.log('[MapaCalor] Buscando lugares do tipo:', type);
       
       try {
-        const response = await fetch('/api/places/search-santos', {
+        const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+        const response = await fetch(`${API_URL}/places/search-santos`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
