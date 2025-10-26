@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
 import Map from "@/pages/Map";
+import MapaCalor from "@/pages/MapaCalor";
 import Events from "@/pages/Events";
 import Profile from "@/pages/Profile";
 import Messages from "@/pages/Messages";
@@ -22,7 +23,8 @@ function Router() {
         <Route path="/" component={Landing} />
       ) : (
             <>
-              <Route path="/" component={Map} />
+              <Route path="/" component={MapaCalor} />
+              <Route path="/map" component={Map} />
               <Route path="/places" component={SantosPlaces} />
               <Route path="/events" component={Events} />
               <Route path="/profile" component={Profile} />
