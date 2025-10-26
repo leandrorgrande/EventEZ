@@ -152,24 +152,15 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
         mediaType = data.mediaFile.type.startsWith('image/') ? 'image' : 'video';
       }
 
-      // Create location with Google Place data
-      const locationData = {
-        name: data.locationName,
-        address: data.locationAddress,
-        latitude: selectedPlace?.geometry?.location?.lat?.toString() || "40.7589",
-        longitude: selectedPlace?.geometry?.location?.lng?.toString() || "-73.9851",
-        googlePlaceId: data.googlePlaceId,
-        category: selectedPlace?.types?.[0] || "venue",
-      };
-
-      const locationResponse = await apiRequest("POST", "/api/locations", locationData);
-      const location = await locationResponse.json();
-
-      // Create the event
+      // Create event directly with location data
       const eventData = {
         title: data.title,
         description: data.description,
-        locationId: location.id,
+        locationName: data.locationName,
+        locationAddress: data.locationAddress,
+        googlePlaceId: data.googlePlaceId || null,
+        latitude: selectedPlace?.geometry?.location?.lat?.toString() || null,
+        longitude: selectedPlace?.geometry?.location?.lng?.toString() || null,
         startDateTime: new Date(data.startDateTime).toISOString(),
         endDateTime: data.endDateTime ? new Date(data.endDateTime).toISOString() : null,
         eventType: data.eventType,
@@ -178,7 +169,22 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
         isActive: true,
       };
 
-      const eventResponse = await apiRequest("POST", "/api/events", eventData);
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      
+      const eventResponse = await fetch(`${API_URL}/events`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(eventData)
+      });
+
+      if (!eventResponse.ok) {
+        throw new Error('Failed to create event');
+      }
+
       return eventResponse.json();
     },
     onSuccess: () => {

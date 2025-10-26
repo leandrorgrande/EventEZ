@@ -56,6 +56,7 @@ app.get('/events', async (req: express.Request, res: express.Response) => {
   try {
     const eventType = req.query.eventType as string;
     const isActive = req.query.isActive === 'true';
+    const approvalStatus = req.query.approvalStatus as string;
     
     let query: FirebaseFirestore.Query = db.collection('events');
     
@@ -68,7 +69,26 @@ app.get('/events', async (req: express.Request, res: express.Response) => {
     }
     
     const snapshot = await query.orderBy('startDateTime', 'desc').get();
-    const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    let events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    // Se solicitou filtro por approvalStatus, filtrar depois
+    if (approvalStatus) {
+      events = events.filter((e: any) => e.approvalStatus === approvalStatus);
+    }
+    
+    // Buscar coordenadas dos lugares se necessário
+    for (const event of events) {
+      if ((event as any).locationId && (event as any).locationId !== 'unknown') {
+        try {
+          const locationDoc = await db.collection('locations').doc((event as any).locationId).get();
+          if (locationDoc.exists) {
+            (event as any).location = { ...locationDoc.data() };
+          }
+        } catch (err) {
+          console.error('Error fetching location:', err);
+        }
+      }
+    }
     
     res.json(events);
   } catch (error) {
