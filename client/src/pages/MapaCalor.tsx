@@ -54,6 +54,7 @@ export default function MapaCalor() {
   const [selectedDay, setSelectedDay] = useState<string>(brasiliaTime.day); // Padrão: Dia atual
   const [selectedHour, setSelectedHour] = useState<number>(brasiliaTime.hour); // Padrão: Hora atual
   const [selectedType, setSelectedType] = useState<string>('all'); // Filtro de tipo
+  const [minRating, setMinRating] = useState<number>(0); // Filtro de avaliação mínima
 
   // Buscar lugares
   const { data: places, isLoading, refetch } = useQuery<Place[]>({
@@ -132,9 +133,17 @@ export default function MapaCalor() {
 
   // Filtrar lugares (FORA do useEffect para usar na lista)
   const filteredPlaces = places
-    ? selectedType === 'all' 
-      ? places 
-      : places.filter(place => place.types && place.types.includes(selectedType))
+    ? places.filter(place => {
+        // Filtro de tipo
+        if (selectedType !== 'all' && (!place.types || !place.types.includes(selectedType))) {
+          return false;
+        }
+        // Filtro de avaliação
+        if (minRating > 0 && (!place.rating || place.rating < minRating)) {
+          return false;
+        }
+        return true;
+      })
     : [];
 
   // Debug: Log quando places mudar
@@ -367,7 +376,7 @@ export default function MapaCalor() {
     return () => {
       google.maps.event.removeListener(mapClickListener);
     };
-  }, [map, places, selectedDay, selectedHour, selectedType]);
+  }, [map, places, selectedDay, selectedHour, selectedType, minRating]);
 
   // Funções auxiliares
   const getColorByPopularity = (popularity: number): string => {
@@ -517,6 +526,27 @@ export default function MapaCalor() {
                   <SelectItem value="night_club">🎉 Baladas</SelectItem>
                   <SelectItem value="restaurant">🍽️ Restaurantes</SelectItem>
                   <SelectItem value="cafe">☕ Cafés</SelectItem>
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+
+          {/* Avaliação Mínima */}
+          <Card className="bg-slate-700 border-slate-600">
+            <CardContent className="p-4">
+              <label className="text-sm text-gray-300 flex items-center gap-2 mb-2">
+                ⭐ Avaliação Mínima
+              </label>
+              <Select value={minRating.toString()} onValueChange={(v) => setMinRating(Number(v))}>
+                <SelectTrigger className="bg-slate-600 border-slate-500 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-700 border-slate-600">
+                  <SelectItem value="0">Todas</SelectItem>
+                  <SelectItem value="3">3.0+ ⭐⭐⭐</SelectItem>
+                  <SelectItem value="3.5">3.5+ ⭐⭐⭐✨</SelectItem>
+                  <SelectItem value="4">4.0+ ⭐⭐⭐⭐</SelectItem>
+                  <SelectItem value="4.5">4.5+ ⭐⭐⭐⭐✨</SelectItem>
                 </SelectContent>
               </Select>
             </CardContent>
