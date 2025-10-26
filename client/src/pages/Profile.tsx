@@ -27,8 +27,12 @@ export default function Profile() {
   const { data: allEvents } = useQuery({
     queryKey: ["/api/events-all-profile"],
     queryFn: async () => {
+      console.log('[Profile] Buscando eventos...');
+      console.log('[Profile] User ID:', user?.id);
       const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
       const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      
+      console.log('[Profile] Token disponível:', !!token);
       
       const response = await fetch(`${API_URL}/events?approvalStatus=all`, {
         headers: {
@@ -36,14 +40,30 @@ export default function Profile() {
         }
       });
       
-      if (!response.ok) throw new Error('Failed to fetch events');
-      return response.json();
+      console.log('[Profile] Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Profile] Erro ao buscar eventos:', errorText);
+        throw new Error(`Failed to fetch events: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Profile] Total de eventos:', data.length);
+      console.log('[Profile] Eventos:', data);
+      return data;
     },
     enabled: !!user?.id,
   });
 
   // Filtrar eventos do usuário atual (todos, independente de status)
-  const userEvents = allEvents?.filter((event: any) => event.creatorId === user?.id) || [];
+  const userEvents = allEvents?.filter((event: any) => {
+    const matches = event.creatorId === user?.id;
+    console.log('[Profile] Evento:', event.title, 'creatorId:', event.creatorId, 'matches:', matches);
+    return matches;
+  }) || [];
+  
+  console.log('[Profile] Eventos do usuário:', userEvents.length);
 
   const handleLogout = async () => {
     try {

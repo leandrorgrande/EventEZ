@@ -276,13 +276,16 @@ export default function MapaCalor() {
         });
 
         // InfoWindow ao clicar
+        const isClosed = popularity === 0;
+        const statusLabel = isClosed ? '🔒 Fechado' : `Movimento ${getPopularityLabel(popularity)}`;
+        const bgColor = isClosed ? '#ef4444' : getColorByPopularity(popularity);
+        
         const infoWindow = new google.maps.InfoWindow({
           content: `
             <div style="padding: 12px; font-family: Arial, sans-serif; min-width: 200px;">
               <h3 style="margin: 0 0 8px 0; color: #1f2937; font-size: 16px;">${place.name}</h3>
-              <div style="background: ${getColorByPopularity(popularity)}; color: white; padding: 6px 10px; border-radius: 4px; margin-bottom: 8px; text-align: center;">
-                <strong style="font-size: 18px;">${popularity}%</strong>
-                <div style="font-size: 12px;">${getPopularityLabel(popularity)}</div>
+              <div style="background: ${bgColor}; color: white; padding: 6px 10px; border-radius: 4px; margin-bottom: 8px; text-align: center;">
+                <strong style="font-size: 16px;">${statusLabel}</strong>
               </div>
               <p style="margin: 0; color: #6b7280; font-size: 13px;">
                 📅 ${getDayLabel(selectedDay)}<br/>
@@ -356,12 +359,14 @@ export default function MapaCalor() {
         const placesHtml = nearbyPlaces
           .map(p => {
             const pop = p.popularTimes[dayKey]?.[selectedHour] || 50;
+            const statusLabel = pop === 0 ? '🔒 Fechado' : `Movimento ${getPopularityLabel(pop)}`;
+            const statusColor = pop === 0 ? '#ef4444' : getColorByPopularity(pop);
             return `
               <div style="padding: 8px; border-bottom: 1px solid #e5e7eb;">
                 <strong style="color: #1f2937;">${p.name}</strong>
                 <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
-                  <div style="width: 12px; height: 12px; border-radius: 50%; background: ${getColorByPopularity(pop)};"></div>
-                  <span style="font-size: 13px; color: #6b7280;">${pop}% - ${getPopularityLabel(pop)}</span>
+                  <div style="width: 12px; height: 12px; border-radius: 50%; background: ${statusColor};"></div>
+                  <span style="font-size: 13px; color: #6b7280;">${statusLabel}</span>
                 </div>
               </div>
             `;

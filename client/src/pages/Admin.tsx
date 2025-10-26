@@ -71,8 +71,12 @@ export default function Admin() {
   const { data: allEvents = [], isLoading: eventsLoading } = useQuery({
     queryKey: ["/api/events-all"],
     queryFn: async () => {
+      console.log('[Admin] Buscando eventos...');
       const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
       const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      
+      console.log('[Admin] Token disponível:', !!token);
+      console.log('[Admin] URL:', `${API_URL}/events?approvalStatus=all`);
       
       const response = await fetch(`${API_URL}/events?approvalStatus=all`, {
         headers: {
@@ -80,8 +84,17 @@ export default function Admin() {
         }
       });
       
-      if (!response.ok) throw new Error('Failed to fetch events');
-      return response.json();
+      console.log('[Admin] Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Admin] Erro ao buscar eventos:', errorText);
+        throw new Error(`Failed to fetch events: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Admin] Eventos retornados:', data.length);
+      return data;
     },
   });
 
