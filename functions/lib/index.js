@@ -449,8 +449,21 @@ app.post('/places/search-santos', authenticate, async (req, res) => {
         };
         for (const place of data.places || []) {
             const placeType = place.primaryType || 'bar';
+            console.log('[API] Processando lugar:', place.displayName?.text);
+            console.log('[API] regularOpeningHours disponível:', !!place.regularOpeningHours);
+            console.log('[API] currentOpeningHours disponível:', !!place.currentOpeningHours);
             // Extrair horários de funcionamento
             const openingHours = extractOpeningHours(place.regularOpeningHours);
+            // Calcular isOpen baseado no currentOpeningHours
+            let isOpenValue = null;
+            if (place.currentOpeningHours) {
+                isOpenValue = place.currentOpeningHours.openNow || null;
+            }
+            console.log('[API] isOpen calculado:', isOpenValue);
+            console.log('[API] openingHours extraído:', openingHours ? 'SIM' : 'NÃO');
+            if (openingHours) {
+                console.log('[API] Exemplo de horário (monday):', openingHours.monday);
+            }
             // Gerar popularTimes baseado nos horários de funcionamento
             const popularTimes = generateDefaultPopularTimes(placeType, openingHours);
             const placeInfo = {
@@ -461,9 +474,9 @@ app.post('/places/search-santos', authenticate, async (req, res) => {
                 longitude: place.location?.longitude?.toString() || null,
                 rating: place.rating || null,
                 userRatingsTotal: place.userRatingCount || 0,
-                isOpen: null,
+                isOpen: isOpenValue, // ⭐ STATUS ATUAL (aberto/fechado AGORA)
                 types: place.primaryType ? [place.primaryType] : [],
-                openingHours: openingHours, // ⭐ HORÁRIOS DE FUNCIONAMENTO
+                openingHours: openingHours, // ⭐ HORÁRIOS DE FUNCIONAMENTO POR DIA
                 popularTimes: popularTimes, // ⭐ POPULAR TIMES AJUSTADOS
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
