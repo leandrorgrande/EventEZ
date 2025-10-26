@@ -13,6 +13,7 @@ import Profile from "@/pages/Profile";
 import Messages from "@/pages/Messages";
 import Admin from "@/pages/Admin";
 import SantosPlaces from "@/pages/SantosPlaces";
+import AdminPopularTimes from "@/pages/AdminPopularTimes";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -27,9 +28,10 @@ function Router() {
               <Route path="/map" component={Map} />
               <Route path="/places" component={SantosPlaces} />
               <Route path="/events" component={Events} />
-              <Route path="/profile" component={Profile} />
-              <Route path="/messages" component={Messages} />
-              <Route path="/admin" component={Admin} />
+                <Route path="/profile" component={Profile} />
+                <Route path="/messages" component={Messages} />
+                <Route path="/admin" component={Admin} />
+                <Route path="/admin/popular-times" component={AdminPopularTimes} />
             </>
       )}
       <Route component={NotFound} />

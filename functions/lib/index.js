@@ -253,6 +253,40 @@ app.post('/places/search-santos', authenticate, async (req, res) => {
         res.status(500).json({ message: "Failed to search places" });
     }
 });
+// Update popular times (admin)
+app.put('/places/:placeId/popular-times', async (req, res) => {
+    try {
+        const { placeId } = req.params;
+        const { popularTimes, dataSource = 'manual' } = req.body;
+        console.log('[API] Atualizando popular times para:', placeId);
+        // Buscar lugar no Firestore
+        const placesQuery = await db.collection('places')
+            .where('id', '==', placeId)
+            .limit(1)
+            .get();
+        if (placesQuery.empty) {
+            res.status(404).json({ message: "Place not found" });
+            return;
+        }
+        const placeDoc = placesQuery.docs[0];
+        // Atualizar
+        await placeDoc.ref.update({
+            popularTimes,
+            dataSource,
+            lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+        });
+        console.log('[API] Popular times atualizado com sucesso');
+        res.json({
+            message: "Popular times updated successfully",
+            placeId,
+            dataSource
+        });
+    }
+    catch (error) {
+        console.error('[API] Erro ao atualizar popular times:', error);
+        res.status(500).json({ message: "Failed to update popular times" });
+    }
+});
 // Export all functions
 exports.api = (0, https_1.onRequest)({ region: 'us-central1' }, app);
 //# sourceMappingURL=index.js.map
