@@ -26,11 +26,13 @@ export function useAuth() {
         try {
           const userDocRef = doc(db, 'users', firebaseUser.uid);
           const userDoc = await getDoc(userDocRef);
-          
+
           if (userDoc.exists()) {
+            console.log('[useAuth] Perfil encontrado:', userDoc.data());
             setUserProfile({ id: userDoc.id, ...userDoc.data() });
           } else {
             // Se não existe, criar documento automaticamente
+            console.log('[useAuth] Criando novo perfil para:', firebaseUser.email);
             const newUserProfile = {
               email: firebaseUser.email || '',
               firstName: firebaseUser.displayName?.split(' ')[0] || '',
@@ -40,12 +42,35 @@ export function useAuth() {
               createdAt: serverTimestamp(),
               updatedAt: serverTimestamp(),
             };
-            
-            await setDoc(userDocRef, newUserProfile);
-            setUserProfile({ id: firebaseUser.uid, ...newUserProfile });
+
+            try {
+              await setDoc(userDocRef, newUserProfile);
+              console.log('[useAuth] Perfil criado com sucesso');
+              setUserProfile({ id: firebaseUser.uid, ...newUserProfile });
+            } catch (createError: any) {
+              console.error('[useAuth] Erro ao criar perfil:', createError);
+              // Se falhar ao criar, usar dados básicos do Firebase Auth
+              setUserProfile({
+                id: firebaseUser.uid,
+                email: firebaseUser.email || '',
+                firstName: firebaseUser.displayName?.split(' ')[0] || '',
+                lastName: firebaseUser.displayName?.split(' ').slice(1).join(' ') || '',
+                profileImageUrl: firebaseUser.photoURL || '',
+                userType: 'regular' as const,
+              });
+            }
           }
-        } catch (error) {
-          console.error('Error fetching user profile:', error);
+        } catch (error: any) {
+          console.error('[useAuth] Error fetching user profile:', error);
+          // Em caso de erro, usar dados básicos do Firebase Auth
+          setUserProfile({
+            id: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            firstName: firebaseUser.displayName?.split(' ')[0] || '',
+            lastName: firebaseUser.displayName?.split(' ').slice(1).join(' ') || '',
+            profileImageUrl: firebaseUser.photoURL || '',
+            userType: 'regular' as const,
+          });
         }
       } else {
         setUserProfile(null);
