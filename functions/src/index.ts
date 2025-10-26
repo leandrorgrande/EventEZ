@@ -110,8 +110,12 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
   try {
     const { locationType = 'bar' } = req.body;
     
-    // Use environment variable instead of functions.config()
-    const apiKey = process.env.GOOGLE_MAPS_API_KEY || "AIzaSyAv1QPfxhhYJ-a7czQhXPILtUI3Qz16UAg";
+    // Use hardcoded API key (temporary for debugging)
+    const apiKey = "AIzaSyAv1QPfxhhYJ-a7czQhXPILtUI3Qz16UAg";
+    
+    console.log('[API] Buscando lugares do tipo:', locationType);
+    console.log('[API] API Key configurada:', apiKey ? 'SIM' : 'NÃO');
+    
     if (!apiKey) {
       res.status(500).json({ message: "Google Maps API key not configured" });
       return;
@@ -144,6 +148,9 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
       }
     };
 
+    console.log('[API] Fazendo requisição para:', url);
+    console.log('[API] Body:', JSON.stringify(requestBody, null, 2));
+    
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -154,8 +161,16 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
       body: JSON.stringify(requestBody)
     });
 
+    console.log('[API] Response status:', response.status);
+    
     if (!response.ok) {
-      res.status(response.status).json({ message: "Failed to search places" });
+      const errorText = await response.text();
+      console.error('[API] Erro da Google Places API:', errorText);
+      res.status(response.status).json({ 
+        message: "Failed to search places", 
+        error: errorText,
+        apiKey: apiKey.substring(0, 10) + '...' // Log parcial da key
+      });
       return;
     }
 
