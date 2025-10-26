@@ -512,21 +512,15 @@ app.post('/places/search-santos', authenticate, async (req, res) => {
                 .where('placeId', '==', place.id)
                 .get();
             if (!existingQuery.empty) {
-                // Lugar já existe, apenas contar
+                // Lugar já existe, SEMPRE atualizar para pegar horários de funcionamento
                 existingPlacesCount++;
                 const docRef = existingQuery.docs[0].ref;
-                const existingData = existingQuery.docs[0].data();
-                // Só atualiza se não tiver popularTimes (era simulado)
-                if (!existingData.popularTimes || existingData.dataSource === 'simulated') {
-                    await docRef.update({
-                        ...placeInfo,
-                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                    });
-                    console.log('[API] Atualizado lugar existente:', place.displayName?.text);
-                }
-                else {
-                    console.log('[API] Lugar já existe e tem dados:', place.displayName?.text);
-                }
+                // SEMPRE atualiza para garantir que horários de funcionamento e isOpen estão atualizados
+                await docRef.update({
+                    ...placeInfo,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                console.log('[API] Atualizado lugar existente com novos horários:', place.displayName?.text);
             }
             else {
                 // Lugar novo, adicionar
@@ -587,6 +581,129 @@ app.put('/places/:placeId/popular-times', async (req, res) => {
     catch (error) {
         console.error('[API] Erro ao atualizar popular times:', error);
         res.status(500).json({ message: "Failed to update popular times" });
+    }
+});
+// Atualizar horários de todos os lugares existentes
+app.post('/places/update-all-hours', authenticate, async (req, res) => {
+    try {
+        const apiKey = "AIzaSyAv1QPfxhhYJ-a7czQhXPILtUI3Qz16UAg";
+        console.log('[API] Buscando todos os lugares do Firestore...');
+        // Buscar todos os lugares
+        const placesSnapshot = await db.collection('places').get();
+        const places = placesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log(`[API] Encontrados ${places.length} lugares no Firestore`);
+        // Função helper para extrair horários (reutilizar do código acima)
+        const extractOpeningHoursLocal = (regularOpeningHours) => {
+            if (!regularOpeningHours?.weekdayDescriptions)
+                return null;
+            const hours = {
+                monday: null,
+                tuesday: null,
+                wednesday: null,
+                thursday: null,
+                friday: null,
+                saturday: null,
+                sunday: null
+            };
+            const dayMapping = {
+                'Segunda-feira': 'monday',
+                'Terça-feira': 'tuesday',
+                'Quarta-feira': 'wednesday',
+                'Quinta-feira': 'thursday',
+                'Sexta-feira': 'friday',
+                'Sábado': 'saturday',
+                'Domingo': 'sunday',
+                'Monday': 'monday',
+                'Tuesday': 'tuesday',
+                'Wednesday': 'wednesday',
+                'Thursday': 'thursday',
+                'Friday': 'friday',
+                'Saturday': 'saturday',
+                'Sunday': 'sunday'
+            };
+            regularOpeningHours.weekdayDescriptions.forEach((desc) => {
+                const parts = desc.split(':');
+                if (parts.length < 2)
+                    return;
+                const dayName = parts[0].trim();
+                const hoursText = parts.slice(1).join(':').trim();
+                const dayKey = dayMapping[dayName];
+                if (dayKey) {
+                    if (hoursText.toLowerCase().includes('fechado') || hoursText.toLowerCase().includes('closed')) {
+                        hours[dayKey] = { open: null, close: null, closed: true };
+                    }
+                    else {
+                        const timeMatch = hoursText.match(/(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})/);
+                        if (timeMatch) {
+                            hours[dayKey] = {
+                                open: `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`,
+                                close: `${timeMatch[3].padStart(2, '0')}:${timeMatch[4]}`,
+                                closed: false
+                            };
+                        }
+                    }
+                }
+            });
+            return hours;
+        };
+        let updatedCount = 0;
+        let errorCount = 0;
+        for (const place of places) {
+            try {
+                if (!place.placeId) {
+                    console.log(`[API] Place sem placeId, pulando: ${place.name}`);
+                    continue;
+                }
+                console.log(`[API] Atualizando: ${place.name} (${place.placeId})`);
+                // Buscar detalhes do lugar na Google Places API
+                const placeDetailsUrl = `https://places.googleapis.com/v1/places/${place.placeId}`;
+                const detailsResponse = await fetch(placeDetailsUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Goog-Api-Key': apiKey,
+                        'X-Goog-FieldMask': 'regularOpeningHours,currentOpeningHours,displayName,rating,userRatingCount'
+                    }
+                });
+                if (!detailsResponse.ok) {
+                    console.error(`[API] Erro ao buscar detalhes: ${detailsResponse.status}`);
+                    errorCount++;
+                    continue;
+                }
+                const placeDetails = await detailsResponse.json();
+                // Extrair horários
+                const openingHours = extractOpeningHoursLocal(placeDetails.regularOpeningHours);
+                let isOpenValue = null;
+                if (placeDetails.currentOpeningHours) {
+                    isOpenValue = placeDetails.currentOpeningHours.openNow || null;
+                }
+                // Atualizar no Firestore
+                const placeRef = db.collection('places').doc(place.id);
+                await placeRef.update({
+                    openingHours,
+                    isOpen: isOpenValue,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                updatedCount++;
+                console.log(`[API] ✅ Atualizado: ${place.name}`);
+                // Aguardar 500ms entre requisições para não exceder rate limit
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            catch (error) {
+                console.error(`[API] Erro ao atualizar ${place.name}:`, error);
+                errorCount++;
+            }
+        }
+        res.json({
+            message: 'Atualização concluída',
+            total: places.length,
+            updated: updatedCount,
+            errors: errorCount
+        });
+    }
+    catch (error) {
+        console.error('[API] Erro geral:', error);
+        res.status(500).json({ message: "Failed to update places" });
     }
 });
 // Export all functions
