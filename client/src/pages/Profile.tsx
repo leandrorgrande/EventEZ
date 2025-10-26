@@ -11,9 +11,14 @@ import BusinessClaimModal from "@/components/BusinessClaimModal";
 import SettingsModal from "@/components/SettingsModal"; // EVENTU: Added Settings modal
 import EventHistoryModal from "@/components/EventHistoryModal"; // EVENTU: Added Event History modal
 import { Settings, History, LogOut, Calendar, Users, Edit3, Building2 } from "lucide-react";
+import { signOutUser } from "@/lib/firebase";
+import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 
 export default function Profile() {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [businessClaimOpen, setBusinessClaimOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false); // EVENTU: Settings modal state
@@ -24,8 +29,21 @@ export default function Profile() {
     enabled: !!user?.id,
   });
 
-  const handleLogout = () => {
-    window.location.href = "/api/logout";
+  const handleLogout = async () => {
+    try {
+      await signOutUser();
+      toast({
+        title: "Logout realizado",
+        description: "Até logo!",
+      });
+      setLocation("/");
+    } catch (error: any) {
+      toast({
+        title: "Erro ao fazer logout",
+        description: error.message || "Tente novamente",
+        variant: "destructive",
+      });
+    }
   };
 
   if (!user) {
