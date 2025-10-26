@@ -246,8 +246,13 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
         isActive: true,
       };
 
+      console.log('[CreateEventModal] Event Data a ser enviado:', JSON.stringify(eventData, null, 2));
+
       const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
       const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      
+      console.log('[CreateEventModal] Token disponível:', !!token);
+      console.log('[CreateEventModal] URL:', `${API_URL}/events`);
       
       const eventResponse = await fetch(`${API_URL}/events`, {
         method: 'POST',
@@ -258,11 +263,18 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
         body: JSON.stringify(eventData)
       });
 
+      console.log('[CreateEventModal] Response status:', eventResponse.status);
+
       if (!eventResponse.ok) {
+        const errorText = await eventResponse.text();
+        console.error('[CreateEventModal] Erro na resposta:', errorText);
         throw new Error('Failed to create event');
       }
 
-      return eventResponse.json();
+      const responseData = await eventResponse.json();
+      console.log('[CreateEventModal] Evento criado com sucesso:', responseData);
+      
+      return responseData;
     },
     onSuccess: () => {
       toast({

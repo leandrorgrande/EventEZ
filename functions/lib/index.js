@@ -115,6 +115,7 @@ app.get('/events', async (req, res) => {
         const eventType = req.query.eventType;
         const isActive = req.query.isActive === 'true';
         const approvalStatus = req.query.approvalStatus;
+        console.log('[API] GET /events - Query params:', { eventType, isActive, approvalStatus });
         let query = db.collection('events');
         if (eventType) {
             query = query.where('eventType', '==', eventType);
@@ -124,20 +125,25 @@ app.get('/events', async (req, res) => {
         }
         const snapshot = await query.orderBy('startDateTime', 'desc').get();
         let events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log('[API] Total de eventos no Firestore:', events.length);
         // Filtrar por approvalStatus (se não especificado, retorna apenas aprovados por padrão)
         if (approvalStatus) {
             if (approvalStatus === 'all') {
+                console.log('[API] Retornando TODOS os eventos (admin)');
                 // Retornar TODOS os eventos (admin)
                 // Não aplicar filtro
             }
             else {
+                console.log('[API] Filtrando por approvalStatus:', approvalStatus);
                 events = events.filter((e) => e.approvalStatus === approvalStatus);
             }
         }
         else {
+            console.log('[API] Padrão: retornando apenas eventos aprovados');
             // Por padrão, retornar apenas eventos aprovados
             events = events.filter((e) => e.approvalStatus === 'approved');
         }
+        console.log('[API] Eventos após filtro:', events.length);
         // Buscar coordenadas dos lugares se necessário
         for (const event of events) {
             if (event.locationId && event.locationId !== 'unknown') {
@@ -148,13 +154,15 @@ app.get('/events', async (req, res) => {
                     }
                 }
                 catch (err) {
-                    console.error('Error fetching location:', err);
+                    console.error('[API] Erro ao buscar location:', err);
                 }
             }
         }
+        console.log('[API] Eventos retornados:', events.length);
         res.json(events);
     }
     catch (error) {
+        console.error('[API] Erro ao buscar eventos:', error);
         res.status(500).json({ message: "Failed to fetch events" });
     }
 });
@@ -162,15 +170,20 @@ app.post('/events', authenticate, async (req, res) => {
     try {
         const user = req.user;
         const { locationName, locationAddress, googlePlaceId, ...eventData } = req.body;
+        console.log('[API] Criando evento - User UID:', user.uid);
+        console.log('[API] Event Data recebido:', JSON.stringify(eventData, null, 2));
+        console.log('[API] Location Info:', { locationName, locationAddress, googlePlaceId });
         // Buscar lugar existente no Firestore pelo placeId
         let locationRef = null;
         if (googlePlaceId) {
+            console.log('[API] Buscando lugar no Firestore pelo placeId:', googlePlaceId);
             const placeQuery = await db.collection('places')
                 .where('placeId', '==', googlePlaceId)
                 .limit(1)
                 .get();
             if (!placeQuery.empty) {
                 const placeData = placeQuery.docs[0].data();
+                console.log('[API] Lugar encontrado no Firestore:', placeData.name);
                 // Criar localização se não existir
                 const locationData = {
                     name: locationName || placeData.name,
@@ -182,10 +195,15 @@ app.post('/events', authenticate, async (req, res) => {
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 };
                 locationRef = await db.collection('locations').add(locationData);
+                console.log('[API] Location criada:', locationRef.id);
+            }
+            else {
+                console.log('[API] Lugar NÃO encontrado no Firestore pelo placeId:', googlePlaceId);
             }
         }
         // Se não encontrou lugar, criar nova localização
         if (!locationRef && locationName && locationAddress) {
+            console.log('[API] Criando nova location sem placeId');
             const newLocation = {
                 name: locationName,
                 address: locationAddress,
@@ -195,6 +213,7 @@ app.post('/events', authenticate, async (req, res) => {
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             };
             locationRef = await db.collection('locations').add(newLocation);
+            console.log('[API] Location criada:', locationRef.id);
         }
         // Criar evento
         const finalEventData = {
@@ -205,12 +224,15 @@ app.post('/events', authenticate, async (req, res) => {
             approvalStatus: 'pending', // EVENTU: Eventos precisam de aprovação
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
         };
+        console.log('[API] Dados finais do evento:', JSON.stringify(finalEventData, null, 2));
         const docRef = await db.collection('events').add(finalEventData);
         const newEvent = { id: docRef.id, ...finalEventData };
+        console.log('[API] Evento criado com sucesso! ID:', docRef.id);
+        console.log('[API] Evento completo:', JSON.stringify(newEvent, null, 2));
         res.json(newEvent);
     }
     catch (error) {
-        console.error('Error creating event:', error);
+        console.error('[API] Erro ao criar evento:', error);
         res.status(400).json({ message: "Failed to create event" });
     }
 });
