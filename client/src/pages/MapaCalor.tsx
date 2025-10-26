@@ -684,9 +684,14 @@ export default function MapaCalor() {
                       map.setZoom(16);
                       
                       // Feedback visual
+                      // Mensagem do toast
+                      const statusMessage = popularity === 0 
+                        ? 'Fechado no momento'
+                        : `${getPopularityLabel(popularity)} - ${popularity}%`;
+                      
                       toast({
                         title: "📍 " + place.name,
-                        description: `${popularity}% de movimento às ${selectedHour}:00`,
+                        description: statusMessage,
                       });
                     }
                   }}
@@ -705,14 +710,17 @@ export default function MapaCalor() {
                           {place.name}
                         </h3>
                         
-                        {/* Movimento */}
+                        {/* Status de movimentação (sem %) */}
                         <div className="flex items-center gap-1 mt-1">
-                          <span className="text-xs md:text-sm font-bold" style={{ color }}>
-                            {popularity}%
-                          </span>
-                          <span className="text-[10px] md:text-xs text-gray-400">
-                            {getPopularityLabel(popularity)}
-                          </span>
+                          {popularity === 0 ? (
+                            <span className="text-xs md:text-sm font-bold text-red-400">
+                              🔒 Fechado
+                            </span>
+                          ) : (
+                            <span className="text-xs md:text-sm font-bold" style={{ color }}>
+                              {getPopularityLabel(popularity)}
+                            </span>
+                          )}
                         </div>
                         
                         {/* Rating */}
