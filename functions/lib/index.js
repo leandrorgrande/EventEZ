@@ -339,8 +339,16 @@ app.post('/places/search-santos', authenticate, async (req, res) => {
         console.log('[API] Lugares recebidos da Google:', data.places?.length || 0);
         // Função para extrair horários de funcionamento
         const extractOpeningHours = (regularOpeningHours) => {
-            if (!regularOpeningHours?.weekdayDescriptions)
+            console.log('[API] extractOpeningHours chamada com:', JSON.stringify(regularOpeningHours, null, 2));
+            if (!regularOpeningHours) {
+                console.log('[API] regularOpeningHours é null/undefined');
                 return null;
+            }
+            if (!regularOpeningHours.weekdayDescriptions) {
+                console.log('[API] weekdayDescriptions não existe em regularOpeningHours');
+                console.log('[API] Keys disponíveis:', Object.keys(regularOpeningHours));
+                return null;
+            }
             const hours = {
                 monday: null,
                 tuesday: null,
@@ -366,17 +374,25 @@ app.post('/places/search-santos', authenticate, async (req, res) => {
                 'Saturday': 'saturday',
                 'Sunday': 'sunday'
             };
-            regularOpeningHours.weekdayDescriptions.forEach((desc) => {
+            console.log('[API] weekdayDescriptions:', regularOpeningHours.weekdayDescriptions);
+            regularOpeningHours.weekdayDescriptions.forEach((desc, index) => {
+                console.log(`[API] Processando descrição ${index}:`, desc);
                 // Exemplo: "Segunda-feira: 18:00 – 02:00"
                 const parts = desc.split(':');
-                if (parts.length < 2)
+                console.log(`[API] Parts split por ':' :`, parts);
+                if (parts.length < 2) {
+                    console.log(`[API] Descrição tem menos de 2 partes, pulando`);
                     return;
+                }
                 const dayName = parts[0].trim();
                 const hoursText = parts.slice(1).join(':').trim();
+                console.log(`[API] Day name: ${dayName}, Hours text: ${hoursText}`);
                 const dayKey = dayMapping[dayName];
+                console.log(`[API] Day key mapeado: ${dayKey}`);
                 if (dayKey) {
                     if (hoursText.toLowerCase().includes('fechado') || hoursText.toLowerCase().includes('closed')) {
                         hours[dayKey] = { open: null, close: null, closed: true };
+                        console.log(`[API] ${dayKey}: FECHADO`);
                     }
                     else {
                         // Extrair horários (ex: "18:00 – 02:00")
@@ -387,10 +403,18 @@ app.post('/places/search-santos', authenticate, async (req, res) => {
                                 close: `${timeMatch[3].padStart(2, '0')}:${timeMatch[4]}`,
                                 closed: false
                             };
+                            console.log(`[API] ${dayKey}: ${hours[dayKey].open} - ${hours[dayKey].close}`);
+                        }
+                        else {
+                            console.log(`[API] ${dayKey}: Não conseguiu extrair horários da string "${hoursText}"`);
                         }
                     }
                 }
+                else {
+                    console.log(`[API] Day key ${dayName} não encontrado no mapping`);
+                }
             });
+            console.log('[API] Horários extraídos:', JSON.stringify(hours, null, 2));
             return hours;
         };
         // Função para gerar horários populares baseados no horário de funcionamento
