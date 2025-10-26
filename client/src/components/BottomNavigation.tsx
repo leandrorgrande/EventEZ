@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Map, Calendar, MessageCircle, User, Shield } from "lucide-react";
+import { Map, Calendar, User, Shield } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter"; // EVENTU: Added client-side routing
 
@@ -32,12 +32,6 @@ export default function BottomNavigation({ currentPage, onNavigate }: BottomNavi
       label: "Events",
       icon: Calendar,
       href: "/events",
-    },
-    {
-      id: "messages",
-      label: "Messages",
-      icon: MessageCircle,
-      href: "/messages",
     },
     {
       id: "profile",
