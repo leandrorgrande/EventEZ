@@ -533,6 +533,107 @@ export default function MapaCalor() {
       {/* Mapa */}
       <div ref={mapRef} className="flex-1 w-full" />
 
+      {/* Lista de Lugares - Abaixo do mapa */}
+      {filteredPlaces && filteredPlaces.length > 0 && (
+        <div className="bg-slate-800 p-3 md:p-4 border-t border-slate-700 max-h-[250px] md:max-h-[300px] overflow-y-auto">
+          <h2 className="text-base md:text-lg font-bold text-white mb-2 md:mb-3 flex items-center gap-2">
+            <MapPin className="h-4 w-4 md:h-5 md:w-5 text-blue-500" />
+            Lugares ({filteredPlaces.length})
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
+            {filteredPlaces.map(place => {
+              const dayKey = selectedDay as keyof typeof place.popularTimes;
+              const popularity = place.popularTimes?.[dayKey]?.[selectedHour] || 0;
+              const color = getColorByPopularity(popularity);
+              
+              return (
+                <Card 
+                  key={place.id} 
+                  className="bg-slate-700 border-slate-600 cursor-pointer hover:bg-slate-600 transition-colors hover:border-blue-500"
+                  onClick={() => {
+                    if (map && place.latitude && place.longitude) {
+                      // Centralizar no lugar
+                      map.panTo({ 
+                        lat: parseFloat(place.latitude.toString()), 
+                        lng: parseFloat(place.longitude.toString()) 
+                      });
+                      // Dar zoom
+                      map.setZoom(16);
+                      
+                      // Feedback visual
+                      toast({
+                        title: "📍 " + place.name,
+                        description: `${popularity}% de movimento às ${selectedHour}:00`,
+                      });
+                    }
+                  }}
+                >
+                  <CardContent className="p-2 md:p-3">
+                    <div className="flex items-start gap-2">
+                      {/* Indicador de cor */}
+                      <div 
+                        className="w-3 h-3 md:w-4 md:h-4 rounded-full flex-shrink-0 mt-1" 
+                        style={{ backgroundColor: color }}
+                      ></div>
+                      
+                      <div className="flex-1 min-w-0">
+                        {/* Nome */}
+                        <h3 className="text-sm md:text-md font-semibold text-white truncate">
+                          {place.name}
+                        </h3>
+                        
+                        {/* Movimento */}
+                        <div className="flex items-center gap-1 mt-1">
+                          <span className="text-xs md:text-sm font-bold" style={{ color }}>
+                            {popularity}%
+                          </span>
+                          <span className="text-[10px] md:text-xs text-gray-400">
+                            {getPopularityLabel(popularity)}
+                          </span>
+                        </div>
+                        
+                        {/* Rating */}
+                        {place.rating && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <span className="text-xs md:text-sm text-yellow-400">⭐</span>
+                            <span className="text-xs md:text-sm text-gray-300">
+                              {place.rating.toFixed(1)}
+                            </span>
+                            <span className="text-[10px] md:text-xs text-gray-500">
+                              ({place.userRatingsTotal})
+                            </span>
+                          </div>
+                        )}
+                        
+                        {/* Endereço */}
+                        {place.formattedAddress && (
+                          <p className="text-[10px] md:text-xs text-gray-400 truncate mt-1">
+                            📍 {place.formattedAddress}
+                          </p>
+                        )}
+                        
+                        {/* Horário de funcionamento */}
+                        {place.openingHours && place.openingHours[dayKey] && (
+                          <p className="text-[10px] md:text-xs text-gray-500 mt-1">
+                            {place.openingHours[dayKey].closed ? (
+                              <span className="text-red-400">🔒 Fechado</span>
+                            ) : (
+                              <span className="text-green-400">
+                                🕐 {place.openingHours[dayKey].open} - {place.openingHours[dayKey].close}
+                              </span>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Bottom Navigation */}
       <BottomNavigation currentPage="map" onNavigate={() => {}} />
     </div>
