@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -42,7 +42,7 @@ export default function MapaCalor() {
   const [selectedType, setSelectedType] = useState<string>('all'); // Filtro de tipo
 
   // Buscar lugares
-  const { data: places, isLoading } = useQuery<Place[]>({
+  const { data: places, isLoading, refetch } = useQuery<Place[]>({
     queryKey: ['/api/places'],
     queryFn: async () => {
       const response = await fetch('/api/places');
@@ -50,6 +50,37 @@ export default function MapaCalor() {
       return response.json();
     },
   });
+
+  // Buscar lugares automaticamente se estiver vazio
+  const searchPlacesMutation = useMutation({
+    mutationFn: async (type: string) => {
+      const response = await fetch('/api/places/search-santos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locationType: type, maxResults: 50 })
+      });
+      if (!response.ok) throw new Error('Failed to search places');
+      return response.json();
+    },
+    onSuccess: () => {
+      refetch();
+      toast({
+        title: "Lugares carregados!",
+        description: "O mapa de calor foi atualizado",
+      });
+    },
+  });
+
+  // Carregar lugares automaticamente na primeira vez
+  useEffect(() => {
+    if (places && places.length === 0 && !searchPlacesMutation.isPending) {
+      toast({
+        title: "Carregando lugares...",
+        description: "Buscando bares em Santos",
+      });
+      searchPlacesMutation.mutate('bars');
+    }
+  }, [places]);
 
   // Inicializar Google Maps
   useEffect(() => {
@@ -143,33 +174,47 @@ export default function MapaCalor() {
         });
       }
 
-      // Adicionar marcador se popularidade > 60%
-      if (popularity >= 60) {
+      // Adicionar marcador se popularidade > 40% (reduzido para mostrar mais lugares)
+      if (popularity >= 40) {
         const marker = new google.maps.Marker({
           position: location,
           map,
           title: `${place.name} - ${popularity}%`,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: 8 + (popularity / 10), // Tamanho baseado na popularidade
+            scale: 6 + (popularity / 8), // Tamanho baseado na popularidade
             fillColor: getColorByPopularity(popularity),
-            fillOpacity: 0.8,
+            fillOpacity: 0.9,
             strokeColor: '#ffffff',
             strokeWeight: 2,
-          }
+          },
+          animation: popularity >= 80 ? google.maps.Animation.BOUNCE : undefined,
         });
 
         // InfoWindow ao clicar
         const infoWindow = new google.maps.InfoWindow({
           content: `
-            <div style="padding: 10px; font-family: Arial, sans-serif;">
-              <h3 style="margin: 0 0 5px 0; color: #1f2937;">${place.name}</h3>
-              <p style="margin: 0; color: #6b7280; font-size: 14px;">
-                <strong>Popularidade:</strong> ${popularity}% (${getPopularityLabel(popularity)})
+            <div style="padding: 12px; font-family: Arial, sans-serif; min-width: 200px;">
+              <h3 style="margin: 0 0 8px 0; color: #1f2937; font-size: 16px;">${place.name}</h3>
+              <div style="background: ${getColorByPopularity(popularity)}; color: white; padding: 6px 10px; border-radius: 4px; margin-bottom: 8px; text-align: center;">
+                <strong style="font-size: 18px;">${popularity}%</strong>
+                <div style="font-size: 12px;">${getPopularityLabel(popularity)}</div>
+              </div>
+              <p style="margin: 0; color: #6b7280; font-size: 13px;">
+                📅 ${getDayLabel(selectedDay)}<br/>
+                🕐 ${selectedHour}:00
               </p>
-              <p style="margin: 5px 0 0 0; color: #6b7280; font-size: 12px;">
-                ${getDayLabel(selectedDay)} às ${selectedHour}:00
-              </p>
+              ${place.formattedAddress ? `
+                <p style="margin: 8px 0 0 0; color: #9ca3af; font-size: 12px;">
+                  📍 ${place.formattedAddress}
+                </p>
+              ` : ''}
+              <button 
+                onclick="window.open('https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}', '_blank')"
+                style="margin-top: 10px; width: 100%; padding: 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;"
+              >
+                Ver no Google Maps
+              </button>
             </div>
           `
         });
@@ -186,18 +231,84 @@ export default function MapaCalor() {
     const heatmapLayer = new google.maps.visualization.HeatmapLayer({
       data: heatmapData,
       map,
-      radius: 30,
-      opacity: 0.7,
+      radius: 40, // Aumentado para cobrir mais área
+      opacity: 0.8,
+      maxIntensity: 10,
+      dissipating: true,
       gradient: [
         'rgba(0, 255, 0, 0)',      // Transparente (baixa popularidade)
-        'rgba(255, 255, 0, 0.7)',  // Amarelo (média)
+        'rgba(102, 255, 0, 0.4)',  // Verde claro
+        'rgba(255, 255, 0, 0.6)',  // Amarelo (média)
         'rgba(255, 165, 0, 0.8)',  // Laranja (alta)
+        'rgba(255, 69, 0, 0.9)',   // Laranja escuro
         'rgba(255, 0, 0, 1)'       // Vermelho (muito alta)
       ]
     });
 
+    // Adicionar listener de clique no mapa para mostrar lugares próximos
+    const mapClickListener = map.addListener('click', (e: google.maps.MapMouseEvent) => {
+      if (!e.latLng) return;
+      
+      const clickedLat = e.latLng.lat();
+      const clickedLng = e.latLng.lng();
+      
+      // Encontrar lugares próximos (raio de ~200m)
+      const nearbyPlaces = filteredPlaces.filter(place => {
+        if (!place.latitude || !place.longitude) return false;
+        
+        const lat = parseFloat(place.latitude.toString());
+        const lng = parseFloat(place.longitude.toString());
+        
+        const distance = Math.sqrt(
+          Math.pow(lat - clickedLat, 2) + Math.pow(lng - clickedLng, 2)
+        );
+        
+        return distance < 0.002; // ~200m
+      });
+      
+      if (nearbyPlaces.length > 0) {
+        const dayKey = selectedDay as keyof typeof nearbyPlaces[0].popularTimes;
+        
+        const placesHtml = nearbyPlaces
+          .map(p => {
+            const pop = p.popularTimes[dayKey]?.[selectedHour] || 50;
+            return `
+              <div style="padding: 8px; border-bottom: 1px solid #e5e7eb;">
+                <strong style="color: #1f2937;">${p.name}</strong>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                  <div style="width: 12px; height: 12px; border-radius: 50%; background: ${getColorByPopularity(pop)};"></div>
+                  <span style="font-size: 13px; color: #6b7280;">${pop}% - ${getPopularityLabel(pop)}</span>
+                </div>
+              </div>
+            `;
+          })
+          .join('');
+        
+        const areaInfoWindow = new google.maps.InfoWindow({
+          content: `
+            <div style="padding: 10px; font-family: Arial, sans-serif; max-width: 250px;">
+              <h3 style="margin: 0 0 10px 0; color: #1f2937; font-size: 15px;">
+                📍 ${nearbyPlaces.length} lugar(es) nesta área
+              </h3>
+              <div style="max-height: 200px; overflow-y: auto;">
+                ${placesHtml}
+              </div>
+            </div>
+          `,
+          position: e.latLng
+        });
+        
+        areaInfoWindow.open(map);
+      }
+    });
+
     setHeatmap(heatmapLayer);
     setMarkers(newMarkers);
+    
+    // Cleanup
+    return () => {
+      google.maps.event.removeListener(mapClickListener);
+    };
   }, [map, places, selectedDay, selectedHour, selectedType]);
 
   // Funções auxiliares
@@ -237,13 +348,33 @@ export default function MapaCalor() {
       {/* Header com Controles */}
       <div className="bg-slate-800 border-b border-slate-700 p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-blue-500" />
-            Mapa de Calor - Santos
-          </h1>
-          {isLoading && (
-            <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-          )}
+          <div>
+            <h1 className="text-xl font-bold text-white flex items-center gap-2">
+              <MapPin className="h-5 w-5 text-blue-500" />
+              Mapa de Calor - Santos
+            </h1>
+            <p className="text-sm text-gray-400 mt-1">
+              {places && places.length > 0 
+                ? `${places.length} lugares carregados`
+                : 'Carregando lugares...'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {(isLoading || searchPlacesMutation.isPending) && (
+              <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+            )}
+            {places && places.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => searchPlacesMutation.mutate(selectedType === 'all' ? 'bars' : selectedType)}
+                disabled={searchPlacesMutation.isPending}
+                className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
+              >
+                🔄 Atualizar
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Controles */}
