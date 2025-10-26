@@ -108,7 +108,12 @@ app.get('/events', async (req: express.Request, res: express.Response) => {
     
     // Filtrar por approvalStatus (se não especificado, retorna apenas aprovados por padrão)
     if (approvalStatus) {
-      events = events.filter((e: any) => e.approvalStatus === approvalStatus);
+      if (approvalStatus === 'all') {
+        // Retornar TODOS os eventos (admin)
+        // Não aplicar filtro
+      } else {
+        events = events.filter((e: any) => e.approvalStatus === approvalStatus);
+      }
     } else {
       // Por padrão, retornar apenas eventos aprovados
       events = events.filter((e: any) => e.approvalStatus === 'approved');

@@ -67,9 +67,22 @@ export default function Admin() {
     queryKey: ["/api/users"],
   });
 
-  // Fetch all events
+  // Fetch all events (without approvalStatus filter to get ALL events for admin)
   const { data: allEvents = [], isLoading: eventsLoading } = useQuery({
-    queryKey: ["/api/events"],
+    queryKey: ["/api/events-all"],
+    queryFn: async () => {
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      
+      const response = await fetch(`${API_URL}/events?approvalStatus=all`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) throw new Error('Failed to fetch events');
+      return response.json();
+    },
   });
 
   // Filter events by approval status
