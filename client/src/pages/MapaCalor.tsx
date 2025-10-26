@@ -723,10 +723,23 @@ export default function MapaCalor() {
                             </span>
                           ) : (
                             <span className="text-xs md:text-sm font-bold" style={{ color }}>
-                              {getPopularityLabel(popularity)}
+                              Movimento {getPopularityLabel(popularity)}
                             </span>
                           )}
                         </div>
+                        
+                        {/* Horário de funcionamento */}
+                        {place.openingHours && place.openingHours[dayKey] && (
+                          <p className="text-[10px] md:text-xs mt-1">
+                            {place.openingHours[dayKey].closed ? (
+                              <span className="text-red-400">🔒 Fechado o dia todo</span>
+                            ) : (
+                              <span className="text-green-400">
+                                🕐 {place.openingHours[dayKey].open} - {place.openingHours[dayKey].close}
+                              </span>
+                            )}
+                          </p>
+                        )}
                         
                         {/* Rating */}
                         {place.rating && (
@@ -745,19 +758,6 @@ export default function MapaCalor() {
                         {place.formattedAddress && (
                           <p className="text-[10px] md:text-xs text-gray-400 truncate mt-1">
                             📍 {place.formattedAddress}
-                          </p>
-                        )}
-                        
-                        {/* Horário de funcionamento */}
-                        {place.openingHours && place.openingHours[dayKey] && (
-                          <p className="text-[10px] md:text-xs text-gray-500 mt-1">
-                            {place.openingHours[dayKey].closed ? (
-                              <span className="text-red-400">🔒 Fechado</span>
-                            ) : (
-                              <span className="text-green-400">
-                                🕐 {place.openingHours[dayKey].open} - {place.openingHours[dayKey].close}
-                              </span>
-                            )}
                           </p>
                         )}
                       </div>
