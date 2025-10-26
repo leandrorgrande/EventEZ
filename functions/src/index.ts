@@ -83,7 +83,6 @@ app.post('/events', authenticate, async (req: express.Request, res: express.Resp
     
     // Buscar lugar existente no Firestore pelo placeId
     let locationRef = null;
-    let placeRef = null;
     
     if (googlePlaceId) {
       const placeQuery = await db.collection('places')
@@ -92,7 +91,6 @@ app.post('/events', authenticate, async (req: express.Request, res: express.Resp
         .get();
       
       if (!placeQuery.empty) {
-        placeRef = placeQuery.docs[0].ref;
         const placeData = placeQuery.docs[0].data();
         
         // Criar localização se não existir

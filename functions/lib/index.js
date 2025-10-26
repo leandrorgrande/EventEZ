@@ -102,16 +102,56 @@ app.get('/events', async (req, res) => {
 app.post('/events', authenticate, async (req, res) => {
     try {
         const user = req.user;
-        const eventData = {
-            ...req.body,
+        const { locationName, locationAddress, googlePlaceId, ...eventData } = req.body;
+        // Buscar lugar existente no Firestore pelo placeId
+        let locationRef = null;
+        if (googlePlaceId) {
+            const placeQuery = await db.collection('places')
+                .where('placeId', '==', googlePlaceId)
+                .limit(1)
+                .get();
+            if (!placeQuery.empty) {
+                const placeData = placeQuery.docs[0].data();
+                // Criar localização se não existir
+                const locationData = {
+                    name: locationName || placeData.name,
+                    address: locationAddress || placeData.formattedAddress,
+                    latitude: placeData.latitude,
+                    longitude: placeData.longitude,
+                    googlePlaceId,
+                    category: placeData.types?.[0],
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                };
+                locationRef = await db.collection('locations').add(locationData);
+            }
+        }
+        // Se não encontrou lugar, criar nova localização
+        if (!locationRef && locationName && locationAddress) {
+            const newLocation = {
+                name: locationName,
+                address: locationAddress,
+                latitude: eventData.latitude || null,
+                longitude: eventData.longitude || null,
+                googlePlaceId: googlePlaceId || null,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            };
+            locationRef = await db.collection('locations').add(newLocation);
+        }
+        // Criar evento
+        const finalEventData = {
+            ...eventData,
             creatorId: user.uid,
+            locationId: locationRef?.id || 'unknown',
+            placeId: googlePlaceId || null,
+            approvalStatus: 'pending', // EVENTU: Eventos precisam de aprovação
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
         };
-        const docRef = await db.collection('events').add(eventData);
-        const newEvent = { id: docRef.id, ...eventData };
+        const docRef = await db.collection('events').add(finalEventData);
+        const newEvent = { id: docRef.id, ...finalEventData };
         res.json(newEvent);
     }
     catch (error) {
+        console.error('Error creating event:', error);
         res.status(400).json({ message: "Failed to create event" });
     }
 });
