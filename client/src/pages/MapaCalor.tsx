@@ -5,8 +5,12 @@ import { auth } from "@/lib/firebase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import BottomNavigation from "@/components/BottomNavigation";
-import { Loader2, Calendar, Clock, Filter, MapPin, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, Calendar as CalendarIcon, Clock, Filter, MapPin, ChevronDown, ChevronUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 // Coordenadas de Santos, SP
@@ -41,28 +45,33 @@ export default function MapaCalor() {
   const getBrasiliaTime = () => {
     const now = new Date();
     const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    return brasiliaTime;
+  };
+
+  // Função para converter Date para dia da semana em inglês
+  const getWeekdayFromDate = (date: Date): string => {
     const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    return {
-      day: dayNames[brasiliaTime.getDay()],
-      hour: brasiliaTime.getHours()
-    };
+    return dayNames[date.getDay()];
   };
 
   const brasiliaTime = getBrasiliaTime();
 
   // Controles de tempo
-  const [selectedDay, setSelectedDay] = useState<string>(brasiliaTime.day); // Padrão: Dia atual
-  const [selectedHour, setSelectedHour] = useState<number>(brasiliaTime.hour); // Padrão: Hora atual
+  const [selectedDate, setSelectedDate] = useState<Date>(brasiliaTime); // Padrão: Data atual
+  const [selectedHour, setSelectedHour] = useState<number>(brasiliaTime.getHours()); // Padrão: Hora atual
   const [selectedType, setSelectedType] = useState<string>('all'); // Filtro de tipo
   const [minRating, setMinRating] = useState<number>(0); // Filtro de avaliação mínima
   const [filtersExpanded, setFiltersExpanded] = useState<boolean>(true); // Controle de expansão dos filtros
 
+  // Calcular dia da semana a partir da data selecionada
+  const selectedDay = getWeekdayFromDate(selectedDate);
+
   // Debug: Log do horário de Brasília
   useEffect(() => {
-    console.log('[MapaCalor] Horário de Brasília:', brasiliaTime);
-    console.log('[MapaCalor] Dia selecionado:', selectedDay);
+    console.log('[MapaCalor] Data selecionada:', selectedDate);
+    console.log('[MapaCalor] Dia da semana (backend):', selectedDay);
     console.log('[MapaCalor] Hora selecionada:', selectedHour);
-  }, [selectedDay, selectedHour, brasiliaTime]);
+  }, [selectedDate, selectedDay, selectedHour]);
 
   // Buscar lugares
   const { data: places, isLoading, refetch } = useQuery<Place[]>({
@@ -494,27 +503,58 @@ export default function MapaCalor() {
 
             {/* Controles */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Dia da Semana */}
+          {/* Data */}
           <Card className="bg-slate-700 border-slate-600">
             <CardContent className="p-4">
               <label className="text-sm text-gray-300 flex items-center gap-2 mb-2">
-                <Calendar className="h-4 w-4" />
-                Dia da Semana
+                <CalendarIcon className="h-4 w-4" />
+                Data
               </label>
-              <Select value={selectedDay} onValueChange={setSelectedDay}>
-                <SelectTrigger className="bg-slate-600 border-slate-500 text-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-700 border-slate-600">
-                  <SelectItem value="monday">Segunda-feira</SelectItem>
-                  <SelectItem value="tuesday">Terça-feira</SelectItem>
-                  <SelectItem value="wednesday">Quarta-feira</SelectItem>
-                  <SelectItem value="thursday">Quinta-feira</SelectItem>
-                  <SelectItem value="friday">Sexta-feira</SelectItem>
-                  <SelectItem value="saturday">Sábado</SelectItem>
-                  <SelectItem value="sunday">Domingo</SelectItem>
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant={"outline"}
+                    className="w-full justify-start text-left font-normal bg-slate-600 border-slate-500 text-white hover:bg-slate-500"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {selectedDate ? format(selectedDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecione uma data"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 bg-slate-700 border-slate-600" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={(date) => date && setSelectedDate(date)}
+                    initialFocus
+                    className="text-white"
+                    classNames={{
+                      months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0 bg-slate-700",
+                      month: "space-y-4",
+                      caption: "flex justify-center pt-1 relative items-center",
+                      caption_label: "text-sm font-medium text-white",
+                      nav: "space-x-1 flex items-center",
+                      nav_button: "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 text-white",
+                      nav_button_previous: "absolute left-1",
+                      nav_button_next: "absolute right-1",
+                      table: "w-full border-collapse space-y-1",
+                      head_row: "flex",
+                      head_cell: "text-gray-400 rounded-md w-9 font-normal text-[0.8rem]",
+                      row: "flex w-full mt-2",
+                      cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+                      day: "h-9 w-9 p-0 font-normal aria-selected:opacity-100 hover:bg-slate-600 rounded-md text-white",
+                      day_selected: "bg-blue-600 text-white hover:bg-blue-700 focus:bg-blue-700",
+                      day_today: "bg-slate-600 text-white",
+                      day_outside: "text-gray-500 opacity-50",
+                      day_disabled: "text-gray-500 opacity-50",
+                      day_range_middle: "aria-selected:bg-slate-600 aria-selected:text-white",
+                      day_hidden: "invisible",
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+              <p className="text-xs text-gray-400 mt-2">
+                {getDayLabel(selectedDay)}
+              </p>
             </CardContent>
           </Card>
 

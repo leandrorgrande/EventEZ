@@ -15,7 +15,7 @@ export default function Events() {
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const { data: events, isLoading } = useQuery({
-    queryKey: ["/api/events", { eventType: filterType !== "all" ? filterType : undefined }],
+    queryKey: ["/api/events", { eventType: filterType !== "all" ? filterType : undefined, approvalStatus: "approved" }],
   });
 
   const filteredEvents = events?.filter((event: any) => 

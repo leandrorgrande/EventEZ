@@ -106,9 +106,12 @@ app.get('/events', async (req: express.Request, res: express.Response) => {
     const snapshot = await query.orderBy('startDateTime', 'desc').get();
     let events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     
-    // Se solicitou filtro por approvalStatus, filtrar depois
+    // Filtrar por approvalStatus (se não especificado, retorna apenas aprovados por padrão)
     if (approvalStatus) {
       events = events.filter((e: any) => e.approvalStatus === approvalStatus);
+    } else {
+      // Por padrão, retornar apenas eventos aprovados
+      events = events.filter((e: any) => e.approvalStatus === 'approved');
     }
     
     // Buscar coordenadas dos lugares se necessário
