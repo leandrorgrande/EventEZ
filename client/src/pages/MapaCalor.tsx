@@ -57,6 +57,13 @@ export default function MapaCalor() {
   const [minRating, setMinRating] = useState<number>(0); // Filtro de avaliação mínima
   const [filtersExpanded, setFiltersExpanded] = useState<boolean>(true); // Controle de expansão dos filtros
 
+  // Debug: Log do horário de Brasília
+  useEffect(() => {
+    console.log('[MapaCalor] Horário de Brasília:', brasiliaTime);
+    console.log('[MapaCalor] Dia selecionado:', selectedDay);
+    console.log('[MapaCalor] Hora selecionada:', selectedHour);
+  }, [selectedDay, selectedHour, brasiliaTime]);
+
   // Buscar lugares
   const { data: places, isLoading, refetch } = useQuery<Place[]>({
     queryKey: ['/api/places'],

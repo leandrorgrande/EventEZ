@@ -77,6 +77,12 @@ export default function Admin() {
   const approvedEvents = allEvents.filter((event: any) => event.approvalStatus === 'approved');
   const rejectedEvents = allEvents.filter((event: any) => event.approvalStatus === 'rejected');
 
+  // Debug logs
+  console.log('[Admin] All Events:', allEvents);
+  console.log('[Admin] Pending Events:', pendingEvents);
+  console.log('[Admin] Approved Events:', approvedEvents);
+  console.log('[Admin] Rejected Events:', rejectedEvents);
+
   // Update business claim status
   const updateClaimMutation = useMutation({
     mutationFn: async ({ claimId, status }: { claimId: string; status: string }) => {
