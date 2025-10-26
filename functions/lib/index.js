@@ -84,6 +84,7 @@ app.get('/events', async (req, res) => {
     try {
         const eventType = req.query.eventType;
         const isActive = req.query.isActive === 'true';
+        const approvalStatus = req.query.approvalStatus;
         let query = db.collection('events');
         if (eventType) {
             query = query.where('eventType', '==', eventType);
@@ -92,7 +93,25 @@ app.get('/events', async (req, res) => {
             query = query.where('isActive', '==', isActive);
         }
         const snapshot = await query.orderBy('startDateTime', 'desc').get();
-        const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        let events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Se solicitou filtro por approvalStatus, filtrar depois
+        if (approvalStatus) {
+            events = events.filter((e) => e.approvalStatus === approvalStatus);
+        }
+        // Buscar coordenadas dos lugares se necessário
+        for (const event of events) {
+            if (event.locationId && event.locationId !== 'unknown') {
+                try {
+                    const locationDoc = await db.collection('locations').doc(event.locationId).get();
+                    if (locationDoc.exists) {
+                        event.location = { ...locationDoc.data() };
+                    }
+                }
+                catch (err) {
+                    console.error('Error fetching location:', err);
+                }
+            }
+        }
         res.json(events);
     }
     catch (error) {

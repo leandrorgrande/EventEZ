@@ -88,34 +88,111 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
       return;
     }
 
-    // Mock Google Places API - in real app, use Google Places API
-    const mockPlaces = [
-      {
-        place_id: "mock_1",
-        description: `${query} - Bar & Grill, Manhattan, NY`,
-        name: `${query} Bar & Grill`,
-        formatted_address: "123 Main St, Manhattan, NY 10001",
-        geometry: { location: { lat: 40.7589, lng: -73.9851 } },
-        types: ["bar", "restaurant"]
-      },
-      {
-        place_id: "mock_2", 
-        description: `${query} Club, Brooklyn, NY`,
-        name: `${query} Club`,
-        formatted_address: "456 Brooklyn Ave, Brooklyn, NY 11201",
-        geometry: { location: { lat: 40.6892, lng: -73.9442 } },
-        types: ["night_club"]
+    try {
+      // Usar Google Places Autocomplete API
+      const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyAv1QPfxhhYJ-a7czQhXPILtUI3Qz16UAg";
+      
+      const url = `https://places.googleapis.com/v1/places:autocomplete`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'suggestions.placePrediction.placeId,suggestions.placePrediction.text,suggestions.placePrediction.structuredFormat'
+        },
+        body: JSON.stringify({
+          input: query,
+          locationBias: {
+            circle: {
+              center: { latitude: -23.9608, longitude: -46.3332 },
+              radius: 50000.0
+            }
+          },
+          includedRegionCodes: ['BR']
+        })
+      });
+
+      if (!response.ok) {
+        console.error('Places API error:', response.status);
+        setPlacePredictions([]);
+        return;
       }
-    ];
-    
-    setPlacePredictions(mockPlaces);
+
+      const data = await response.json();
+      
+      // Converter predictions para formato esperado
+      const places = data.suggestions?.map((suggestion: any) => {
+        const prediction = suggestion.placePrediction;
+        return {
+          place_id: prediction.placeId,
+          description: prediction.text?.text || '',
+          name: prediction.structuredFormat?.mainText?.text || prediction.text?.text || '',
+          formatted_address: prediction.structuredFormat?.secondaryText?.text || '',
+          geometry: { location: { lat: null, lng: null } }, // Será preenchido quando selecionar
+          types: []
+        };
+      }) || [];
+      
+      setPlacePredictions(places);
+    } catch (error) {
+      console.error('Error searching places:', error);
+      setPlacePredictions([]);
+    }
   };
 
-  const handlePlaceSelect = (place: any) => {
-    setSelectedPlace(place);
-    form.setValue("locationName", place.name);
-    form.setValue("locationAddress", place.formatted_address);
-    form.setValue("googlePlaceId", place.place_id);
+  const handlePlaceSelect = async (place: any) => {
+    try {
+      // Buscar detalhes completos do lugar
+      const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyAv1QPfxhhYJ-a7czQhXPILtUI3Qz16UAg";
+      
+      const detailsUrl = `https://places.googleapis.com/v1/places/${place.place_id}`;
+      
+      const response = await fetch(detailsUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'id,displayName,formattedAddress,location,types'
+        }
+      });
+
+      if (response.ok) {
+        const details = await response.json();
+        
+        const fullPlace = {
+          place_id: details.id,
+          name: details.displayName?.text || place.name,
+          formatted_address: details.formattedAddress || place.formatted_address,
+          geometry: {
+            location: {
+              lat: details.location?.latitude || null,
+              lng: details.location?.longitude || null
+            }
+          },
+          types: details.types || []
+        };
+        
+        setSelectedPlace(fullPlace);
+        form.setValue("locationName", fullPlace.name);
+        form.setValue("locationAddress", fullPlace.formatted_address);
+        form.setValue("googlePlaceId", fullPlace.place_id);
+      } else {
+        // Fallback para dados disponíveis
+        setSelectedPlace(place);
+        form.setValue("locationName", place.name);
+        form.setValue("locationAddress", place.formatted_address);
+        form.setValue("googlePlaceId", place.place_id);
+      }
+    } catch (error) {
+      console.error('Error fetching place details:', error);
+      // Fallback para dados disponíveis
+      setSelectedPlace(place);
+      form.setValue("locationName", place.name);
+      form.setValue("locationAddress", place.formatted_address);
+      form.setValue("googlePlaceId", place.place_id);
+    }
+    
     setPlacePredictions([]);
   };
 
