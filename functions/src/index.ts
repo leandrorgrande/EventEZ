@@ -156,7 +156,7 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
       headers: {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.googleMapsUri,places.regularOpeningHours,places.primaryType'
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.googleMapsUri,places.regularOpeningHours,places.currentOpeningHours,places.primaryType'
       },
       body: JSON.stringify(requestBody)
     });
@@ -181,8 +181,68 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
     
     console.log('[API] Lugares recebidos da Google:', data.places?.length || 0);
 
-    // Função para gerar horários populares padrão
-    const generateDefaultPopularTimes = (placeType: string) => {
+    // Função para extrair horários de funcionamento
+    const extractOpeningHours = (regularOpeningHours: any) => {
+      if (!regularOpeningHours?.weekdayDescriptions) return null;
+      
+      const hours: any = {
+        monday: null,
+        tuesday: null,
+        wednesday: null,
+        thursday: null,
+        friday: null,
+        saturday: null,
+        sunday: null
+      };
+      
+      const dayMapping: Record<string, string> = {
+        'Segunda-feira': 'monday',
+        'Terça-feira': 'tuesday',
+        'Quarta-feira': 'wednesday',
+        'Quinta-feira': 'thursday',
+        'Sexta-feira': 'friday',
+        'Sábado': 'saturday',
+        'Domingo': 'sunday',
+        'Monday': 'monday',
+        'Tuesday': 'tuesday',
+        'Wednesday': 'wednesday',
+        'Thursday': 'thursday',
+        'Friday': 'friday',
+        'Saturday': 'saturday',
+        'Sunday': 'sunday'
+      };
+      
+      regularOpeningHours.weekdayDescriptions.forEach((desc: string) => {
+        // Exemplo: "Segunda-feira: 18:00 – 02:00"
+        const parts = desc.split(':');
+        if (parts.length < 2) return;
+        
+        const dayName = parts[0].trim();
+        const hoursText = parts.slice(1).join(':').trim();
+        
+        const dayKey = dayMapping[dayName];
+        if (dayKey) {
+          if (hoursText.toLowerCase().includes('fechado') || hoursText.toLowerCase().includes('closed')) {
+            hours[dayKey] = { open: null, close: null, closed: true };
+          } else {
+            // Extrair horários (ex: "18:00 – 02:00")
+            const timeMatch = hoursText.match(/(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})/);
+            if (timeMatch) {
+              hours[dayKey] = {
+                open: `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`,
+                close: `${timeMatch[3].padStart(2, '0')}:${timeMatch[4]}`,
+                closed: false
+              };
+            }
+          }
+        }
+      });
+      
+      return hours;
+    };
+
+    // Função para gerar horários populares baseados no horário de funcionamento
+    const generateDefaultPopularTimes = (placeType: string, openingHours: any) => {
       const isNightlife = ['bar', 'night_club'].includes(placeType);
       
       const weekdayPattern = isNightlife 
@@ -193,20 +253,57 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
         ? [15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 70, 80, 85, 90, 90, 85, 80, 75, 80, 90, 95, 100, 95, 85]
         : [40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40];
 
-      return {
-        monday: weekdayPattern,
-        tuesday: weekdayPattern,
-        wednesday: weekdayPattern,
+      const popularTimes: any = {
+        monday: [...weekdayPattern],
+        tuesday: [...weekdayPattern],
+        wednesday: [...weekdayPattern],
         thursday: weekdayPattern.map(v => Math.min(100, v + 10)),
-        friday: weekendPattern,
-        saturday: weekendPattern,
-        sunday: weekdayPattern
+        friday: [...weekendPattern],
+        saturday: [...weekendPattern],
+        sunday: [...weekdayPattern]
       };
+      
+      // Ajustar baseado nos horários de funcionamento
+      if (openingHours) {
+        Object.keys(popularTimes).forEach(day => {
+          const dayHours = openingHours[day];
+          
+          if (!dayHours || dayHours.closed) {
+            // Fechado o dia todo
+            popularTimes[day] = Array(24).fill(0);
+          } else if (dayHours.open && dayHours.close) {
+            // Zerar horários fora do funcionamento
+            const openHour = parseInt(dayHours.open.split(':')[0]);
+            const closeHour = parseInt(dayHours.close.split(':')[0]);
+            
+            for (let hour = 0; hour < 24; hour++) {
+              if (closeHour > openHour) {
+                // Horário normal (ex: 10:00 - 22:00)
+                if (hour < openHour || hour >= closeHour) {
+                  popularTimes[day][hour] = 0;
+                }
+              } else {
+                // Cruza meia-noite (ex: 18:00 - 02:00)
+                if (hour >= closeHour && hour < openHour) {
+                  popularTimes[day][hour] = 0;
+                }
+              }
+            }
+          }
+        });
+      }
+      
+      return popularTimes;
     };
 
     for (const place of data.places || []) {
       const placeType = place.primaryType || 'bar';
-      const popularTimes = generateDefaultPopularTimes(placeType);
+      
+      // Extrair horários de funcionamento
+      const openingHours = extractOpeningHours(place.regularOpeningHours);
+      
+      // Gerar popularTimes baseado nos horários de funcionamento
+      const popularTimes = generateDefaultPopularTimes(placeType, openingHours);
       
       const placeInfo = {
         placeId: place.id,
@@ -218,12 +315,13 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
         userRatingsTotal: place.userRatingCount || 0,
         isOpen: null,
         types: place.primaryType ? [place.primaryType] : [],
-        popularTimes: popularTimes, // ⭐ ADICIONAR POPULAR TIMES
+        openingHours: openingHours, // ⭐ HORÁRIOS DE FUNCIONAMENTO
+        popularTimes: popularTimes, // ⭐ POPULAR TIMES AJUSTADOS
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
       
-      console.log('[API] Salvando lugar:', place.displayName?.text, 'com popularTimes');
+      console.log('[API] Salvando lugar:', place.displayName?.text, 'com horários:', openingHours ? 'SIM' : 'NÃO');
 
       const existingQuery = await db.collection('places')
         .where('placeId', '==', place.id)
