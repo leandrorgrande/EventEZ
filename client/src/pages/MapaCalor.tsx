@@ -723,23 +723,36 @@ export default function MapaCalor() {
                             </span>
                           ) : (
                             <span className="text-xs md:text-sm font-bold" style={{ color }}>
-                              Movimento {getPopularityLabel(popularity)}
+                              {getPopularityLabel(popularity)}
                             </span>
                           )}
                         </div>
                         
                         {/* Horário de funcionamento */}
-                        {place.openingHours && place.openingHours[dayKey] && (
-                          <p className="text-[10px] md:text-xs mt-1">
-                            {place.openingHours[dayKey].closed ? (
-                              <span className="text-red-400">🔒 Fechado o dia todo</span>
-                            ) : (
-                              <span className="text-green-400">
-                                🕐 {place.openingHours[dayKey].open} - {place.openingHours[dayKey].close}
-                              </span>
-                            )}
-                          </p>
-                        )}
+                        {(() => {
+                          console.log('[MapaCalor] Place:', place.name);
+                          console.log('[MapaCalor] openingHours:', place.openingHours);
+                          console.log('[MapaCalor] dayKey:', dayKey);
+                          console.log('[MapaCalor] openingHours[dayKey]:', place.openingHours?.[dayKey]);
+                          
+                          if (!place.openingHours || !place.openingHours[dayKey]) {
+                            return null;
+                          }
+                          
+                          const dayHours = place.openingHours[dayKey];
+                          
+                          return (
+                            <p className="text-[10px] md:text-xs mt-1">
+                              {dayHours.closed ? (
+                                <span className="text-red-400">🔒 Fechado o dia todo</span>
+                              ) : (
+                                <span className="text-green-400">
+                                  🕐 {dayHours.open} - {dayHours.close}
+                                </span>
+                              )}
+                            </p>
+                          );
+                        })()}
                         
                         {/* Rating */}
                         {place.rating && (
