@@ -57,6 +57,11 @@ export default function Admin() {
     queryKey: ["/api/events"],
   });
 
+  // Filter events by approval status
+  const pendingEvents = allEvents.filter((event: any) => event.approvalStatus === 'pending');
+  const approvedEvents = allEvents.filter((event: any) => event.approvalStatus === 'approved');
+  const rejectedEvents = allEvents.filter((event: any) => event.approvalStatus === 'rejected');
+
   // Update business claim status
   const updateClaimMutation = useMutation({
     mutationFn: async ({ claimId, status }: { claimId: string; status: string }) => {
@@ -86,6 +91,43 @@ export default function Admin() {
       toast({
         title: "Error",
         description: "Failed to update business claim status.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Update event approval status
+  const updateEventMutation = useMutation({
+    mutationFn: async ({ eventId, approvalStatus }: { eventId: string; approvalStatus: string }) => {
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      
+      const response = await fetch(`${API_URL}/events/${eventId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ approvalStatus })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to update event');
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Event Updated",
+        description: "Event status has been updated successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: "Failed to update event status.",
         variant: "destructive",
       });
     },
@@ -139,6 +181,9 @@ export default function Admin() {
                 {allEvents.length}
               </div>
               <div className="text-sm text-gray-400">Total Events</div>
+              <div className="text-xs text-yellow-400 mt-1">
+                {pendingEvents.length} pending
+              </div>
             </CardContent>
           </Card>
 
@@ -336,41 +381,129 @@ export default function Admin() {
 
           {/* Events Tab */}
           <TabsContent value="events" className="space-y-4">
-            <Card className="bg-slate-800 border-slate-700">
-              <CardHeader>
-                <CardTitle className="text-white">All Events</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {eventsLoading ? (
-                  <div className="text-center py-4">
-                    <div className="text-gray-400">Loading events...</div>
-                  </div>
-                ) : allEvents.length === 0 ? (
-                  <p className="text-gray-400 text-center py-4">No events found</p>
-                ) : (
-                  <div className="space-y-3">
-                    {allEvents.map((event: any) => (
-                      <div
-                        key={event.id}
-                        className="p-3 bg-slate-700/50 rounded-lg"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <h4 className="font-medium text-white">{event.title}</h4>
-                            <p className="text-sm text-gray-400 mt-1">
-                              {event.location?.name} • {new Date(event.startDateTime).toLocaleDateString()}
-                            </p>
+            {eventsLoading ? (
+              <div className="text-center py-8">
+                <div className="text-gray-400">Loading events...</div>
+              </div>
+            ) : allEvents.length === 0 ? (
+              <Card className="bg-slate-800 border-slate-700">
+                <CardContent className="p-8 text-center">
+                  <Calendar className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-400">No events yet</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {/* Pending Events */}
+                {pendingEvents.length > 0 && (
+                  <Card className="bg-slate-800 border-slate-700">
+                    <CardHeader>
+                      <CardTitle className="text-yellow-400 flex items-center">
+                        <Clock className="h-5 w-5 mr-2" />
+                        Pending Events ({pendingEvents.length})
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {pendingEvents.map((event: any) => (
+                        <div
+                          key={event.id}
+                          className="p-4 bg-slate-700/50 rounded-lg border border-slate-600"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <h4 className="font-medium text-white mb-2">{event.title}</h4>
+                              <div className="space-y-1 text-sm text-gray-400">
+                                <p className="flex items-center">
+                                  <MapPin className="h-4 w-4 mr-2" />
+                                  {event.location?.name || event.location?.address || "No location"}
+                                </p>
+                                <p className="flex items-center">
+                                  <Calendar className="h-4 w-4 mr-2" />
+                                  {new Date(event.startDateTime).toLocaleString()}
+                                </p>
+                              </div>
+                              {event.description && (
+                                <p className="text-sm text-gray-500 mt-2 line-clamp-2">
+                                  {event.description}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-2 mt-2">
+                                <Badge className="bg-yellow-600">pending</Badge>
+                                <Badge variant="outline" className="text-xs">
+                                  {event.eventType}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="flex flex-col space-y-2 ml-4">
+                              <Button
+                                size="sm"
+                                onClick={() => updateEventMutation.mutate({ 
+                                  eventId: event.id, 
+                                  approvalStatus: "approved" 
+                                })}
+                                disabled={updateEventMutation.isPending}
+                                className="bg-green-600 hover:bg-green-700"
+                              >
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => updateEventMutation.mutate({ 
+                                  eventId: event.id, 
+                                  approvalStatus: "rejected" 
+                                })}
+                                disabled={updateEventMutation.isPending}
+                              >
+                                <XCircle className="h-4 w-4 mr-1" />
+                                Reject
+                              </Button>
+                            </div>
                           </div>
-                          <Badge variant="outline" className="text-xs">
-                            {event.eventType}
-                          </Badge>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </CardContent>
+                  </Card>
                 )}
-              </CardContent>
-            </Card>
+
+                {/* Processed Events */}
+                {(approvedEvents.length > 0 || rejectedEvents.length > 0) && (
+                  <Card className="bg-slate-800 border-slate-700">
+                    <CardHeader>
+                      <CardTitle className="text-white">Processed Events</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {[...approvedEvents, ...rejectedEvents].map((event: any) => (
+                        <div
+                          key={event.id}
+                          className="p-3 bg-slate-700/30 rounded-lg"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <h4 className="font-medium text-white">{event.title}</h4>
+                              <p className="text-sm text-gray-400">
+                                {event.location?.name || "Unknown Location"} • {new Date(event.startDateTime).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {event.approvalStatus === 'approved' ? (
+                                <Badge className="bg-green-600">approved</Badge>
+                              ) : (
+                                <Badge className="bg-red-600">rejected</Badge>
+                              )}
+                              <Badge variant="outline" className="text-xs">
+                                {event.eventType}
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )}
           </TabsContent>
         </Tabs>
       </div>

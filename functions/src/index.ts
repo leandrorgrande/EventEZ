@@ -161,6 +161,44 @@ app.post('/events', authenticate, async (req: express.Request, res: express.Resp
   }
 });
 
+app.patch('/events/:eventId', authenticate, async (req: express.Request, res: express.Response) => {
+  try {
+    const { eventId } = req.params;
+    const { approvalStatus, ...otherData } = req.body;
+    
+    const eventRef = db.collection('events').doc(eventId);
+    const eventDoc = await eventRef.get();
+    
+    if (!eventDoc.exists) {
+      res.status(404).json({ message: "Event not found" });
+      return;
+    }
+    
+    const updateData: any = {
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    
+    if (approvalStatus) {
+      updateData.approvalStatus = approvalStatus;
+      updateData.reviewedBy = (req as any).user.uid;
+      updateData.reviewedAt = admin.firestore.FieldValue.serverTimestamp();
+    }
+    
+    if (otherData && Object.keys(otherData).length > 0) {
+      Object.assign(updateData, otherData);
+    }
+    
+    await eventRef.update(updateData);
+    
+    const updatedEvent = { id: eventDoc.id, ...eventDoc.data(), ...updateData };
+    
+    res.json(updatedEvent);
+  } catch (error) {
+    console.error('Error updating event:', error);
+    res.status(400).json({ message: "Failed to update event" });
+  }
+});
+
 // ============ PLACES ============
 
 app.get('/places', async (req: express.Request, res: express.Response) => {
