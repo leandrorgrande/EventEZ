@@ -106,12 +106,14 @@ export default function MapaCalor() {
   // Carregar lugares automaticamente na primeira vez
   useEffect(() => {
     if (places && places.length === 0 && !searchPlacesMutation.isPending) {
-      console.log('[MapaCalor] Iniciando busca automática de lugares');
+      console.log('[MapaCalor] Banco vazio, buscando lugares iniciais');
       toast({
         title: "Carregando lugares...",
-        description: "Buscando bares em Santos via Google Places API",
+        description: "Buscando bares em Santos",
       });
       searchPlacesMutation.mutate('bars');
+    } else if (places && places.length > 0) {
+      console.log('[MapaCalor] Usando', places.length, 'lugares do Firestore');
     }
   }, [places]);
 
@@ -400,21 +402,37 @@ export default function MapaCalor() {
                 : 'Carregando lugares...'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {(isLoading || searchPlacesMutation.isPending) && (
               <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
             )}
-            {places && places.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => searchPlacesMutation.mutate(selectedType === 'all' ? 'bars' : selectedType)}
-                disabled={searchPlacesMutation.isPending}
-                className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
-              >
-                🔄 Atualizar
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => searchPlacesMutation.mutate('bars')}
+              disabled={searchPlacesMutation.isPending}
+              className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
+            >
+              + Bares
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => searchPlacesMutation.mutate('clubs')}
+              disabled={searchPlacesMutation.isPending}
+              className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
+            >
+              + Baladas
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => searchPlacesMutation.mutate('food')}
+              disabled={searchPlacesMutation.isPending}
+              className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
+            >
+              + Restaurantes
+            </Button>
           </div>
         </div>
 

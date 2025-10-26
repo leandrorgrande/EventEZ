@@ -176,6 +176,8 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
 
     const data = await response.json();
     const savedPlaces = [];
+    let newPlacesCount = 0;
+    let existingPlacesCount = 0;
     
     console.log('[API] Lugares recebidos da Google:', data.places?.length || 0);
 
@@ -228,30 +230,44 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
         .get();
 
       if (!existingQuery.empty) {
+        // Lugar já existe, apenas contar
+        existingPlacesCount++;
         const docRef = existingQuery.docs[0].ref;
-        await docRef.update({
-          ...placeInfo,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        const updatedData = await docRef.get();
-        savedPlaces.push({ id: docRef.id, ...updatedData.data() });
+        const existingData = existingQuery.docs[0].data();
+        
+        // Só atualiza se não tiver popularTimes (era simulado)
+        if (!existingData.popularTimes || existingData.dataSource === 'simulated') {
+          await docRef.update({
+            ...placeInfo,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          console.log('[API] Atualizado lugar existente:', place.displayName?.text);
+        } else {
+          console.log('[API] Lugar já existe e tem dados:', place.displayName?.text);
+        }
       } else {
+        // Lugar novo, adicionar
+        newPlacesCount++;
         const docRef = await db.collection('places').add(placeInfo);
         savedPlaces.push({ id: docRef.id, ...placeInfo });
+        console.log('[API] Novo lugar adicionado:', place.displayName?.text);
       }
     }
     
-    console.log('[API] Total de lugares salvos:', savedPlaces.length);
-    if (savedPlaces.length > 0) {
-      const firstPlace: any = savedPlaces[0];
-      console.log('[API] Primeiro lugar com popularTimes:', firstPlace?.popularTimes ? 'SIM' : 'NÃO');
-    }
+    console.log('[API] Novos lugares:', newPlacesCount);
+    console.log('[API] Lugares já existentes:', existingPlacesCount);
+    console.log('[API] Total processado:', data.places?.length || 0);
 
     res.json({ 
       places: savedPlaces,
       count: savedPlaces.length,
-      message: `${savedPlaces.length} lugares salvos com sucesso`,
-      note: 'Google Places API limita a 20 resultados por requisição. Execute múltiplas vezes para obter mais lugares.'
+      newPlaces: newPlacesCount,
+      existingPlaces: existingPlacesCount,
+      totalProcessed: data.places?.length || 0,
+      message: newPlacesCount > 0 
+        ? `${newPlacesCount} novos lugares adicionados! (${existingPlacesCount} já existiam)`
+        : `Nenhum lugar novo encontrado. Todos os ${existingPlacesCount} já estavam no banco.`,
+      note: 'Google Places API limita a 20 resultados por requisição. Clique novamente para buscar mais lugares diferentes.'
     });
   } catch (error) {
     res.status(500).json({ message: "Failed to search places" });
