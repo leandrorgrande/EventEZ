@@ -37,9 +37,22 @@ export default function MapaCalor() {
   const mapRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
+  // Obter horário atual de Brasília
+  const getBrasiliaTime = () => {
+    const now = new Date();
+    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    return {
+      day: dayNames[brasiliaTime.getDay()],
+      hour: brasiliaTime.getHours()
+    };
+  };
+
+  const brasiliaTime = getBrasiliaTime();
+
   // Controles de tempo
-  const [selectedDay, setSelectedDay] = useState<string>('friday'); // Padrão: Sexta-feira
-  const [selectedHour, setSelectedHour] = useState<number>(22); // Padrão: 22h
+  const [selectedDay, setSelectedDay] = useState<string>(brasiliaTime.day); // Padrão: Dia atual
+  const [selectedHour, setSelectedHour] = useState<number>(brasiliaTime.hour); // Padrão: Hora atual
   const [selectedType, setSelectedType] = useState<string>('all'); // Filtro de tipo
 
   // Buscar lugares
@@ -117,6 +130,13 @@ export default function MapaCalor() {
     }
   }, [places]);
 
+  // Filtrar lugares (FORA do useEffect para usar na lista)
+  const filteredPlaces = places
+    ? selectedType === 'all' 
+      ? places 
+      : places.filter(place => place.types && place.types.includes(selectedType))
+    : [];
+
   // Debug: Log quando places mudar
   useEffect(() => {
     console.log('[MapaCalor] Places atualizados:', places?.length || 0, 'lugares');
@@ -174,7 +194,7 @@ export default function MapaCalor() {
 
   // Atualizar heatmap quando mudar dia, hora ou lugares
   useEffect(() => {
-    if (!map || !places || places.length === 0) return;
+    if (!map || !filteredPlaces || filteredPlaces.length === 0) return;
 
     // Limpar heatmap anterior
     if (heatmap) {
@@ -183,11 +203,6 @@ export default function MapaCalor() {
 
     // Limpar marcadores anteriores
     markers.forEach(marker => marker.setMap(null));
-
-    // Filtrar lugares por tipo
-    const filteredPlaces = selectedType === 'all' 
-      ? places 
-      : places.filter(place => place.types && place.types.includes(selectedType));
 
     // Gerar dados do heatmap
     const heatmapData: google.maps.visualization.WeightedLocation[] = [];
