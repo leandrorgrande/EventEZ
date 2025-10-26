@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { auth } from "@/lib/firebase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
@@ -54,19 +55,48 @@ export default function MapaCalor() {
   // Buscar lugares automaticamente se estiver vazio
   const searchPlacesMutation = useMutation({
     mutationFn: async (type: string) => {
-      const response = await fetch('/api/places/search-santos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ locationType: type, maxResults: 50 })
-      });
-      if (!response.ok) throw new Error('Failed to search places');
-      return response.json();
+      console.log('[MapaCalor] Buscando lugares do tipo:', type);
+      
+      try {
+        const response = await fetch('/api/places/search-santos', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${await auth.currentUser?.getIdToken()}`
+          },
+          body: JSON.stringify({ locationType: type, maxResults: 50 })
+        });
+        
+        console.log('[MapaCalor] Response status:', response.status);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[MapaCalor] Erro na resposta:', errorText);
+          throw new Error(`Failed to search places: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('[MapaCalor] Dados recebidos:', data);
+        return data;
+      } catch (error) {
+        console.error('[MapaCalor] Erro ao buscar lugares:', error);
+        throw error;
+      }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('[MapaCalor] Busca bem-sucedida, refazendo query');
       refetch();
       toast({
         title: "Lugares carregados!",
-        description: "O mapa de calor foi atualizado",
+        description: `${data.count || 0} lugares encontrados`,
+      });
+    },
+    onError: (error: any) => {
+      console.error('[MapaCalor] Erro na mutation:', error);
+      toast({
+        title: "Erro ao carregar lugares",
+        description: error.message || "Tente novamente",
+        variant: "destructive",
       });
     },
   });
@@ -74,11 +104,20 @@ export default function MapaCalor() {
   // Carregar lugares automaticamente na primeira vez
   useEffect(() => {
     if (places && places.length === 0 && !searchPlacesMutation.isPending) {
+      console.log('[MapaCalor] Iniciando busca automática de lugares');
       toast({
         title: "Carregando lugares...",
-        description: "Buscando bares em Santos",
+        description: "Buscando bares em Santos via Google Places API",
       });
       searchPlacesMutation.mutate('bars');
+    }
+  }, [places]);
+
+  // Debug: Log quando places mudar
+  useEffect(() => {
+    console.log('[MapaCalor] Places atualizados:', places?.length || 0, 'lugares');
+    if (places && places.length > 0) {
+      console.log('[MapaCalor] Primeiro lugar:', places[0]);
     }
   }, [places]);
 
