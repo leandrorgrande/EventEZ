@@ -176,8 +176,36 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
 
     const data = await response.json();
     const savedPlaces = [];
+    
+    console.log('[API] Lugares recebidos da Google:', data.places?.length || 0);
+
+    // Função para gerar horários populares padrão
+    const generateDefaultPopularTimes = (placeType: string) => {
+      const isNightlife = ['bar', 'night_club'].includes(placeType);
+      
+      const weekdayPattern = isNightlife 
+        ? [20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 85, 80, 75, 70, 65, 85, 90, 95, 90, 80]
+        : [30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30];
+      
+      const weekendPattern = isNightlife
+        ? [15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 70, 80, 85, 90, 90, 85, 80, 75, 80, 90, 95, 100, 95, 85]
+        : [40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40];
+
+      return {
+        monday: weekdayPattern,
+        tuesday: weekdayPattern,
+        wednesday: weekdayPattern,
+        thursday: weekdayPattern.map(v => Math.min(100, v + 10)),
+        friday: weekendPattern,
+        saturday: weekendPattern,
+        sunday: weekdayPattern
+      };
+    };
 
     for (const place of data.places || []) {
+      const placeType = place.primaryType || 'bar';
+      const popularTimes = generateDefaultPopularTimes(placeType);
+      
       const placeInfo = {
         placeId: place.id,
         name: place.displayName?.text || 'Unknown',
@@ -188,9 +216,12 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
         userRatingsTotal: place.userRatingCount || 0,
         isOpen: null,
         types: place.primaryType ? [place.primaryType] : [],
+        popularTimes: popularTimes, // ⭐ ADICIONAR POPULAR TIMES
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
+      
+      console.log('[API] Salvando lugar:', place.displayName?.text, 'com popularTimes');
 
       const existingQuery = await db.collection('places')
         .where('placeId', '==', place.id)
@@ -202,14 +233,25 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
           ...placeInfo,
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-        savedPlaces.push({ id: docRef.id, ...placeInfo });
+        const updatedData = await docRef.get();
+        savedPlaces.push({ id: docRef.id, ...updatedData.data() });
       } else {
         const docRef = await db.collection('places').add(placeInfo);
         savedPlaces.push({ id: docRef.id, ...placeInfo });
       }
     }
+    
+    console.log('[API] Total de lugares salvos:', savedPlaces.length);
+    if (savedPlaces.length > 0) {
+      const firstPlace: any = savedPlaces[0];
+      console.log('[API] Primeiro lugar com popularTimes:', firstPlace?.popularTimes ? 'SIM' : 'NÃO');
+    }
 
-    res.json({ places: savedPlaces });
+    res.json({ 
+      places: savedPlaces,
+      count: savedPlaces.length,
+      message: `${savedPlaces.length} lugares salvos com sucesso`
+    });
   } catch (error) {
     res.status(500).json({ message: "Failed to search places" });
   }
