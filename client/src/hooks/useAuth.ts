@@ -31,14 +31,40 @@ export function useAuth() {
             console.log('[useAuth] Perfil encontrado:', userDoc.data());
             setUserProfile({ id: userDoc.id, ...userDoc.data() });
           } else {
-            // Se não existe, criar documento automaticamente
+            // Se não existe, criar documento automaticamente com MÁXIMO de informações do Google
             console.log('[useAuth] Criando novo perfil para:', firebaseUser.email);
+            
+            // Extrair informações adicionais do Google
+            const googleProvider = firebaseUser.providerData.find(p => p.providerId === 'google.com');
+            
             const newUserProfile = {
+              // Informações básicas
               email: firebaseUser.email || '',
+              emailVerified: firebaseUser.emailVerified,
               firstName: firebaseUser.displayName?.split(' ')[0] || '',
               lastName: firebaseUser.displayName?.split(' ').slice(1).join(' ') || '',
+              displayName: firebaseUser.displayName || '',
               profileImageUrl: firebaseUser.photoURL || '',
+              
+              // Informações do Google
+              googleUid: googleProvider?.uid || '',
+              googlePhotoURL: googleProvider?.photoURL || '',
+              googleEmail: googleProvider?.email || '',
+              
+              // Metadata do Firebase
+              creationTime: firebaseUser.metadata.creationTime,
+              lastSignInTime: firebaseUser.metadata.lastSignInTime,
+              
+              // Provider info
+              providerId: googleProvider?.providerId || 'google.com',
+              
+              // Telefone (se disponível)
+              phoneNumber: firebaseUser.phoneNumber || '',
+              
+              // User type
               userType: 'regular' as const,
+              
+              // Timestamps
               createdAt: serverTimestamp(),
               updatedAt: serverTimestamp(),
             };

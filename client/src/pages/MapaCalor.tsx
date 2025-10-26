@@ -575,12 +575,12 @@ export default function MapaCalor() {
         </div>
       </div>
 
-      {/* Mapa */}
-      <div ref={mapRef} className="flex-1 w-full" />
+      {/* Mapa - Altura otimizada para mobile */}
+      <div ref={mapRef} className="flex-1 w-full min-h-[60vh] md:min-h-0" />
 
       {/* Lista de Lugares - Abaixo do mapa */}
       {filteredPlaces && filteredPlaces.length > 0 && (
-        <div className="bg-slate-800 p-3 md:p-4 border-t border-slate-700 max-h-[250px] md:max-h-[300px] overflow-y-auto">
+        <div className="bg-slate-800 p-3 md:p-4 border-t border-slate-700 max-h-[35vh] md:max-h-[300px] overflow-y-auto">
           <h2 className="text-base md:text-lg font-bold text-white mb-2 md:mb-3 flex items-center gap-2">
             <MapPin className="h-4 w-4 md:h-5 md:w-5 text-blue-500" />
             Lugares ({filteredPlaces.length})
