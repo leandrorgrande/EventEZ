@@ -24,10 +24,13 @@ export default function Profile() {
   const [settingsOpen, setSettingsOpen] = useState(false); // EVENTU: Settings modal state
   const [historyOpen, setHistoryOpen] = useState(false); // EVENTU: History modal state
 
-  const { data: userEvents } = useQuery({
-    queryKey: ["/api/users", user?.id, "events"],
+  const { data: allEvents } = useQuery({
+    queryKey: ["/api/events"],
     enabled: !!user?.id,
   });
+
+  // Filtrar eventos do usuário atual (todos, independente de status)
+  const userEvents = allEvents?.filter((event: any) => event.creatorId === user?.id) || [];
 
   const handleLogout = async () => {
     try {
@@ -127,21 +130,51 @@ export default function Profile() {
           <CardContent>
             {userEvents && userEvents.length > 0 ? (
               <div className="space-y-3">
-                {userEvents.slice(0, 3).map((event: any) => (
-                  <div key={event.id} className="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg">
-                    <div>
-                      <h4 className="font-medium text-white" data-testid={`text-event-title-${event.id}`}>
-                        {event.title}
-                      </h4>
-                      <p className="text-sm text-gray-400">
-                        {new Date(event.startDateTime).toLocaleDateString()}
-                      </p>
+                {userEvents.slice(0, 5).map((event: any) => {
+                  const getStatusColor = (status: string) => {
+                    switch (status) {
+                      case 'approved': return 'bg-green-600';
+                      case 'rejected': return 'bg-red-600';
+                      case 'pending': return 'bg-yellow-600';
+                      default: return 'bg-gray-600';
+                    }
+                  };
+
+                  const getStatusLabel = (status: string) => {
+                    switch (status) {
+                      case 'approved': return 'Aprovado';
+                      case 'rejected': return 'Rejeitado';
+                      case 'pending': return 'Pendente';
+                      default: return status;
+                    }
+                  };
+
+                  return (
+                    <div key={event.id} className="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg">
+                      <div className="flex-1">
+                        <h4 className="font-medium text-white" data-testid={`text-event-title-${event.id}`}>
+                          {event.title}
+                        </h4>
+                        <p className="text-sm text-gray-400">
+                          {new Date(event.startDateTime).toLocaleDateString()} às {new Date(event.startDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                        {event.location?.name && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            📍 {event.location.name}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <Badge className={`text-xs ${getStatusColor(event.approvalStatus || 'pending')}`}>
+                          {getStatusLabel(event.approvalStatus || 'pending')}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {event.eventType}
+                        </Badge>
+                      </div>
                     </div>
-                    <Badge variant="outline" className="text-xs">
-                      {event.eventType}
-                    </Badge>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <p className="text-gray-400 text-center py-4" data-testid="text-no-events">
