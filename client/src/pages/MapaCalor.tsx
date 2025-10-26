@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import BottomNavigation from "@/components/BottomNavigation";
-import { Loader2, Calendar, Clock, Filter, MapPin } from "lucide-react";
+import { Loader2, Calendar, Clock, Filter, MapPin, ChevronDown, ChevronUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 // Coordenadas de Santos, SP
@@ -55,6 +55,7 @@ export default function MapaCalor() {
   const [selectedHour, setSelectedHour] = useState<number>(brasiliaTime.hour); // Padrão: Hora atual
   const [selectedType, setSelectedType] = useState<string>('all'); // Filtro de tipo
   const [minRating, setMinRating] = useState<number>(0); // Filtro de avaliação mínima
+  const [filtersExpanded, setFiltersExpanded] = useState<boolean>(true); // Controle de expansão dos filtros
 
   // Buscar lugares
   const { data: places, isLoading, refetch } = useQuery<Place[]>({
@@ -414,54 +415,78 @@ export default function MapaCalor() {
     <div className="h-screen flex flex-col bg-slate-900">
       {/* Header com Controles */}
       <div className="bg-slate-800 border-b border-slate-700 p-4 space-y-4">
+        {/* Título e Botão de Colapsar */}
         <div className="flex items-center justify-between">
-          <div>
+          <div className="flex-1">
             <h1 className="text-xl font-bold text-white flex items-center gap-2">
               <MapPin className="h-5 w-5 text-blue-500" />
               Mapa de Calor - Santos
             </h1>
             <p className="text-sm text-gray-400 mt-1">
-              {places && places.length > 0 
-                ? `${places.length} lugares carregados`
-                : 'Carregando lugares...'}
+              {filteredPlaces && filteredPlaces.length > 0 
+                ? `${filteredPlaces.length} de ${places?.length || 0} lugares`
+                : 'Carregando...'}
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {(isLoading || searchPlacesMutation.isPending) && (
-              <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setFiltersExpanded(!filtersExpanded)}
+            className="text-gray-400 hover:text-white"
+          >
+            {filtersExpanded ? (
+              <>
+                <ChevronUp className="h-4 w-4 mr-1" />
+                Ocultar
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-4 w-4 mr-1" />
+                Filtros
+              </>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => searchPlacesMutation.mutate('bars')}
-              disabled={searchPlacesMutation.isPending}
-              className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
-            >
-              + Bares
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => searchPlacesMutation.mutate('clubs')}
-              disabled={searchPlacesMutation.isPending}
-              className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
-            >
-              + Baladas
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => searchPlacesMutation.mutate('food')}
-              disabled={searchPlacesMutation.isPending}
-              className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
-            >
-              + Restaurantes
-            </Button>
-          </div>
+          </Button>
         </div>
 
-        {/* Controles */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Botões de Busca e Controles - Apenas se expandido */}
+        {filtersExpanded && (
+          <>
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {(isLoading || searchPlacesMutation.isPending) && (
+                <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => searchPlacesMutation.mutate('bars')}
+                disabled={searchPlacesMutation.isPending}
+                className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
+              >
+                + Bares
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => searchPlacesMutation.mutate('clubs')}
+                disabled={searchPlacesMutation.isPending}
+                className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
+              >
+                + Baladas
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => searchPlacesMutation.mutate('food')}
+                disabled={searchPlacesMutation.isPending}
+                className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
+              >
+                + Restaurantes
+              </Button>
+            </div>
+
+            {/* Controles */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Dia da Semana */}
           <Card className="bg-slate-700 border-slate-600">
             <CardContent className="p-4">
@@ -553,26 +578,31 @@ export default function MapaCalor() {
           </Card>
         </div>
 
-        {/* Legenda */}
-        <div className="flex items-center gap-4 text-sm text-gray-300">
-          <span className="font-semibold">Legenda:</span>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-green-500"></div>
-            <span>Tranquilo</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-yellow-500"></div>
-            <span>Moderado</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-orange-500"></div>
-            <span>Movimentado</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-red-500"></div>
-            <span>Muito Cheio</span>
-          </div>
-        </div>
+            {/* Legenda */}
+            <div className="flex items-center gap-4 text-sm text-gray-300">
+              <span className="font-semibold">Legenda:</span>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded-full bg-green-500"></div>
+                <span>Tranquilo</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded-full bg-yellow-500"></div>
+                <span>Moderado</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded-full bg-orange-500"></div>
+                <span>Movimentado</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded-full bg-red-500"></div>
+                <span>Muito Cheio</span>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Navegação - Sempre visível */}
+        <BottomNavigation currentPage="map" onNavigate={() => {}} />
       </div>
 
       {/* Mapa - Altura otimizada para mobile */}
@@ -678,9 +708,6 @@ export default function MapaCalor() {
           </div>
         </div>
       )}
-
-      {/* Bottom Navigation */}
-      <BottomNavigation currentPage="map" onNavigate={() => {}} />
     </div>
   );
 }
