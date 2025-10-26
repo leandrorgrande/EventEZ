@@ -151,11 +151,11 @@ app.post('/places/search-santos', authenticate, async (req, res) => {
         const url = 'https://places.googleapis.com/v1/places:searchNearby';
         const requestBody = {
             includedTypes: [placeType],
-            maxResultCount: 20,
+            maxResultCount: 20, // Google limita a 20 por requisição
             locationRestriction: {
                 circle: {
                     center: { latitude: santosLat, longitude: santosLng },
-                    radius: 10000
+                    radius: 15000 // Aumentado para 15km (cobrir toda Santos)
                 }
             }
         };
@@ -246,7 +246,8 @@ app.post('/places/search-santos', authenticate, async (req, res) => {
         res.json({
             places: savedPlaces,
             count: savedPlaces.length,
-            message: `${savedPlaces.length} lugares salvos com sucesso`
+            message: `${savedPlaces.length} lugares salvos com sucesso`,
+            note: 'Google Places API limita a 20 resultados por requisição. Execute múltiplas vezes para obter mais lugares.'
         });
     }
     catch (error) {

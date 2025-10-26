@@ -161,7 +161,12 @@ export default function AdminPopularTimes() {
           {/* Lista de Lugares */}
           <Card className="lg:col-span-1">
             <CardHeader>
-              <CardTitle className="text-lg">Lugares ({places?.length || 0})</CardTitle>
+              <CardTitle className="text-lg">
+                Lugares ({places?.length || 0})
+              </CardTitle>
+              <p className="text-xs text-gray-500 mt-1">
+                Google limita a 20 por busca. Busque mais tipos para adicionar.
+              </p>
             </CardHeader>
             <CardContent>
               <div className="space-y-2 max-h-[600px] overflow-y-auto">
