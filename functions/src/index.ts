@@ -50,6 +50,41 @@ app.get('/users/:id', authenticate, async (req: express.Request, res: express.Re
   }
 });
 
+// Make users admin by email (one-time setup endpoint)
+app.post('/users/make-admin', async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      res.status(400).json({ message: "Email is required" });
+      return;
+    }
+    
+    // Buscar usuário pelo email na coleção users
+    const usersSnapshot = await db.collection('users').where('email', '==', email).limit(1).get();
+    
+    if (usersSnapshot.empty) {
+      res.status(404).json({ message: `User with email ${email} not found` });
+      return;
+    }
+    
+    const userDoc = usersSnapshot.docs[0];
+    await userDoc.ref.update({
+      userType: 'admin',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    res.json({ 
+      message: `User ${email} is now an admin`,
+      userId: userDoc.id,
+      email: email
+    });
+  } catch (error) {
+    console.error('Error making user admin:', error);
+    res.status(500).json({ message: "Failed to make user admin" });
+  }
+});
+
 // ============ EVENTS ============
 
 app.get('/events', async (req: express.Request, res: express.Response) => {
