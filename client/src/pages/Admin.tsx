@@ -101,15 +101,11 @@ export default function Admin() {
   });
 
   // Filter events by approval status
-  const pendingEvents = allEvents.filter((event: any) => event.approvalStatus === 'pending');
-  const approvedEvents = allEvents.filter((event: any) => event.approvalStatus === 'approved');
-  const rejectedEvents = allEvents.filter((event: any) => event.approvalStatus === 'rejected');
+  const pendingEvents = (allEvents || []).filter((event: any) => event.approvalStatus === 'pending');
+  const approvedEvents = (allEvents || []).filter((event: any) => event.approvalStatus === 'approved');
+  const rejectedEvents = (allEvents || []).filter((event: any) => event.approvalStatus === 'rejected');
 
-  // Debug logs
-  console.log('[Admin] All Events:', allEvents);
-  console.log('[Admin] Pending Events:', pendingEvents);
-  console.log('[Admin] Approved Events:', approvedEvents);
-  console.log('[Admin] Rejected Events:', rejectedEvents);
+  // Debug logs (removed to prevent useEffect issues)
 
   // Update business claim status
   const updateClaimMutation = useMutation({

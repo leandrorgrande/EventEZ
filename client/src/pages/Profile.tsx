@@ -19,6 +19,12 @@ export default function Profile() {
   const { user, userProfile, isAdmin } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  
+  // Debug logs
+  console.log('[Profile] user:', user);
+  console.log('[Profile] userProfile:', userProfile);
+  console.log('[Profile] isAdmin:', isAdmin);
+  console.log('[Profile] userType:', userProfile?.userType);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [businessClaimOpen, setBusinessClaimOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false); // EVENTU: Settings modal state
