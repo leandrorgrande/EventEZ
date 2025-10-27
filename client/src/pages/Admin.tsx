@@ -190,7 +190,7 @@ export default function Admin() {
       </div>
 
       <div className="p-4">
-        <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-3 gap-4 mb-6">
           <Card className="bg-slate-800 border-slate-700">
             <CardContent className="p-4 text-center">
               <Users className="h-8 w-8 text-blue-400 mx-auto mb-2" />
@@ -203,7 +203,13 @@ export default function Admin() {
               <Calendar className="h-8 w-8 text-green-400 mx-auto mb-2" />
               <div className="text-2xl font-bold text-white">{Array.isArray(allEvents) ? allEvents.length : 0}</div>
               <div className="text-sm text-gray-400">Total Events</div>
-              <div className="text-xs text-yellow-400 mt-1">{pendingEvents.length} pending</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-slate-800 border-slate-700">
+            <CardContent className="p-4 text-center">
+              <Clock className="h-8 w-8 text-yellow-400 mx-auto mb-2" />
+              <div className="text-2xl font-bold text-white">{pendingEvents.length}</div>
+              <div className="text-sm text-gray-400">Pending Events</div>
             </CardContent>
           </Card>
         </div>
@@ -236,31 +242,62 @@ export default function Admin() {
             )}
             
             {pendingEvents.length > 0 && (
-              <Card className="bg-slate-800 border-slate-700">
-                <CardHeader>
-                  <CardTitle className="text-yellow-400 flex items-center">
-                    <Clock className="h-5 w-5 mr-2" />
-                    Pending Events ({pendingEvents.length})
+              <Card className="bg-slate-800 border-2 border-yellow-600">
+                <CardHeader className="bg-yellow-600/10">
+                  <CardTitle className="text-yellow-400 flex items-center justify-between">
+                    <div className="flex items-center">
+                      <Clock className="h-5 w-5 mr-2" />
+                      Pending Approval ({pendingEvents.length})
+                    </div>
+                    <Badge className="bg-yellow-600 text-white">{pendingEvents.length} events pending</Badge>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {pendingEvents.map((event: any) => (
-                    <div key={event.id} className="p-4 bg-slate-700/50 rounded-lg border border-slate-600">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h4 className="font-medium text-white mb-2">{event.title}</h4>
-                          <div className="space-y-1 text-sm text-gray-400">
-                            <p className="flex items-center"><MapPin className="h-4 w-4 mr-2" />{event.location?.name || "No location"}</p>
-                            <p className="flex items-center"><Calendar className="h-4 w-4 mr-2" />{new Date(event.startDateTime).toLocaleString()}</p>
+                    <div key={event.id} className="p-4 bg-slate-700/50 rounded-lg border border-yellow-700/50">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold text-white mb-2 text-lg">{event.title}</h4>
+                          {event.description && (
+                            <p className="text-sm text-gray-300 mb-3">{event.description}</p>
+                          )}
+                          <div className="space-y-2 text-sm">
+                            <div className="flex items-center text-gray-400">
+                              <MapPin className="h-4 w-4 mr-2 flex-shrink-0" />
+                              <span className="truncate">{event.location?.name || event.location?.address || "No location"}</span>
+                            </div>
+                            <div className="flex items-center text-gray-400">
+                              <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
+                              <span>{new Date(event.startDateTime).toLocaleString('pt-BR')}</span>
+                            </div>
+                            {event.endDateTime && (
+                              <div className="flex items-center text-gray-400">
+                                <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
+                                <span>Até: {new Date(event.endDateTime).toLocaleString('pt-BR')}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center text-gray-400">
+                              <span className="font-medium">Tipo:</span>
+                              <Badge className="ml-2 bg-blue-600">{event.eventType || 'N/A'}</Badge>
+                            </div>
                           </div>
-                          <Badge className="mt-2 bg-yellow-600">pending</Badge>
                         </div>
-                        <div className="flex flex-col space-y-2 ml-4">
-                          <Button size="sm" onClick={() => updateEventMutation.mutate({ eventId: event.id, approvalStatus: "approved" })} className="bg-green-600 hover:bg-green-700">
-                            <CheckCircle className="h-4 w-4 mr-1" /> Approve
+                        <div className="flex flex-col space-y-2 ml-4 flex-shrink-0">
+                          <Button 
+                            size="sm" 
+                            onClick={() => updateEventMutation.mutate({ eventId: event.id, approvalStatus: "approved" })} 
+                            className="bg-green-600 hover:bg-green-700 min-w-[100px]"
+                            disabled={updateEventMutation.isPending}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" /> Aprovar
                           </Button>
-                          <Button size="sm" variant="destructive" onClick={() => updateEventMutation.mutate({ eventId: event.id, approvalStatus: "rejected" })}>
-                            <XCircle className="h-4 w-4 mr-1" /> Reject
+                          <Button 
+                            size="sm" 
+                            variant="destructive" 
+                            onClick={() => updateEventMutation.mutate({ eventId: event.id, approvalStatus: "rejected" })}
+                            disabled={updateEventMutation.isPending}
+                          >
+                            <XCircle className="h-4 w-4 mr-1" /> Rejeitar
                           </Button>
                         </div>
                       </div>
