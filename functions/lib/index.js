@@ -130,16 +130,23 @@ app.get('/events', async (req, res) => {
         const isActive = req.query.isActive === 'true';
         const approvalStatus = req.query.approvalStatus;
         console.log('[API] GET /events - Query params:', { eventType, isActive, approvalStatus });
-        let query = db.collection('events');
-        if (eventType) {
-            query = query.where('eventType', '==', eventType);
-        }
-        if (isActive !== undefined) {
-            query = query.where('isActive', '==', isActive);
-        }
-        const snapshot = await query.orderBy('startDateTime', 'desc').get();
+        // Buscar TODOS os eventos primeiro
+        const snapshot = await db.collection('events').get();
         let events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         console.log('[API] Total de eventos no Firestore:', events.length);
+        // Aplicar filtros em memória
+        if (eventType) {
+            events = events.filter((e) => e.eventType === eventType);
+        }
+        if (isActive !== undefined) {
+            events = events.filter((e) => e.isActive === isActive);
+        }
+        // Ordenar por data
+        events = events.sort((a, b) => {
+            const dateA = new Date(a.startDateTime).getTime();
+            const dateB = new Date(b.startDateTime).getTime();
+            return dateB - dateA; // Ordem decrescente (mais recente primeiro)
+        });
         // Filtrar por approvalStatus (se não especificado, retorna apenas aprovados por padrão)
         if (approvalStatus) {
             if (approvalStatus === 'all') {
