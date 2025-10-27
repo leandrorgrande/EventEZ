@@ -25,6 +25,8 @@ export default function Admin() {
   const { userProfile, isLoading: authLoading, isAdmin } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [scrapingResults, setScrapingResults] = useState<any>(null);
+  const [isScraping, setIsScraping] = useState(false);
 
   // Show loading while checking auth
   if (authLoading) {
@@ -180,6 +182,52 @@ export default function Admin() {
     },
   });
 
+  // Mutation para executar scraping
+  const scrapeMutation = useMutation({
+    mutationFn: async () => {
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      
+      const response = await fetch(`${API_URL}/places/scrape-popular-times`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to scrape: ${errorText}`);
+      }
+      
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setScrapingResults(data);
+      toast({
+        title: "Scraping concluído",
+        description: `${data.success} lugares atualizados, ${data.errors} erros`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro no scraping",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+    onSettled: () => {
+      setIsScraping(false);
+    }
+  });
+
+  const handleStartScraping = () => {
+    setIsScraping(true);
+    setScrapingResults(null);
+    scrapeMutation.mutate();
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "approved": return "bg-green-600";
@@ -257,7 +305,7 @@ export default function Admin() {
 
         {/* Main Content */}
         <Tabs defaultValue="claims" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3 bg-slate-800">
+          <TabsList className="grid w-full grid-cols-4 bg-slate-800">
             <TabsTrigger value="claims" className="data-[state=active]:bg-slate-700">
               Business Claims
             </TabsTrigger>
@@ -266,6 +314,9 @@ export default function Admin() {
             </TabsTrigger>
             <TabsTrigger value="events" className="data-[state=active]:bg-slate-700">
               Events
+            </TabsTrigger>
+            <TabsTrigger value="scraping" className="data-[state=active]:bg-slate-700">
+              Scraping
             </TabsTrigger>
           </TabsList>
 
@@ -552,10 +603,131 @@ export default function Admin() {
               </>
             )}
           </TabsContent>
+
+          {/* New Scraping Tab */}
+          <TabsContent value="scraping" className="mt-4">
+            <Card className="bg-slate-800 border-slate-700">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5" />
+                  Web Scraping - Popular Times
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="bg-yellow-900/20 border border-yellow-800 rounded-lg p-4">
+                  <p className="text-sm text-yellow-200">
+                    <strong>⚠️ Atenção:</strong> Este processo busca horários de pico reais do Google Maps 
+                    para os lugares cadastrados no Firestore. Pode levar alguns minutos.
+                  </p>
+                </div>
+
+                <Button
+                  onClick={handleStartScraping}
+                  disabled={isScraping}
+                  className="w-full"
+                  size="lg"
+                >
+                  {isScraping ? (
+                    <>
+                      <Clock className="h-4 w-4 mr-2 animate-spin" />
+                      Executando Scraping...
+                    </>
+                  ) : (
+                    <>
+                      <MapPin className="h-4 w-4 mr-2" />
+                      Iniciar Scraping
+                    </>
+                  )}
+                </Button>
+
+                {scrapingResults && (
+                  <div className="mt-6 space-y-4">
+                    {/* Summary */}
+                    <div className="grid grid-cols-3 gap-4">
+                      <Card className="bg-slate-700 border-slate-600">
+                        <CardContent className="pt-4">
+                          <p className="text-sm text-gray-400">Total</p>
+                          <p className="text-2xl font-bold">{scrapingResults.total}</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-green-900/20 border-green-800">
+                        <CardContent className="pt-4">
+                          <p className="text-sm text-green-300">Sucesso</p>
+                          <p className="text-2xl font-bold text-green-400">{scrapingResults.success}</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-red-900/20 border-red-800">
+                        <CardContent className="pt-4">
+                          <p className="text-sm text-red-300">Erros</p>
+                          <p className="text-2xl font-bold text-red-400">{scrapingResults.errors}</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Results */}
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-semibold">Resultados Detalhados</h3>
+                      {scrapingResults.results && scrapingResults.results.map((result: any, index: number) => (
+                        <Card key={index} className={`bg-slate-700 border ${
+                          result.status === 'success' ? 'border-green-600' : 
+                          result.status === 'error' ? 'border-red-600' : 
+                          'border-yellow-600'
+                        }`}>
+                          <CardContent className="pt-4">
+                            <div className="flex items-start justify-between mb-2">
+                              <h4 className="font-semibold">{result.placeName}</h4>
+                              <Badge variant={
+                                result.status === 'success' ? 'default' : 
+                                result.status === 'error' ? 'destructive' : 
+                                'secondary'
+                              }>
+                                {result.status}
+                              </Badge>
+                            </div>
+                            
+                            {/* Logs */}
+                            {result.logs && result.logs.length > 0 && (
+                              <div className="bg-slate-800 rounded p-3 mt-2 space-y-1">
+                                {result.logs.map((log: string, logIndex: number) => (
+                                  <p key={logIndex} className="text-xs font-mono text-gray-300">
+                                    {log}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Error */}
+                            {result.error && (
+                              <p className="text-xs text-red-400 mt-2">
+                                ❌ {result.error}
+                              </p>
+                            )}
+
+                            {/* Data Sample */}
+                            {result.data && result.data.sample && (
+                              <div className="mt-3 p-2 bg-slate-600 rounded">
+                                <p className="text-xs text-gray-300 mb-1">📊 Amostra dos dados:</p>
+                                <p className="text-xs font-mono text-blue-300">
+                                  Segunda: [{result.data.sample.monday.join(', ')}...]
+                                </p>
+                                <p className="text-xs font-mono text-blue-300">
+                                  Sexta: [{result.data.sample.friday.join(', ')}...]
+                                </p>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
 
-      <BottomNavigation />
+      <BottomNavigation currentPage="/admin" />
     </div>
   );
 }

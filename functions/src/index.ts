@@ -602,21 +602,26 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
 // Função para fazer scraping de Popular Times do Google Maps
 const scrapePopularTimes = async (placeName: string, googleMapsUri: string): Promise<any | null> => {
   try {
-    console.log(`[Scraping] Iniciando scraping para: ${placeName}`);
+    console.log(`[Scraping] 🔍 Iniciando scraping para: ${placeName}`);
+    console.log(`[Scraping] 📍 URL: ${googleMapsUri}`);
     
     // Usar axios para fazer requisição HTTP
     const axios = require('axios');
+    console.log(`[Scraping] ⏳ Fazendo requisição HTTP...`);
+    
     const response = await axios.get(googleMapsUri, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
       }
     });
     
+    console.log(`[Scraping] ✅ Resposta recebida. Status: ${response.status}`);
+    console.log(`[Scraping] 📄 Tamanho do HTML: ${response.data.length} caracteres`);
+    
     const html = response.data;
     const $ = cheerio.load(html);
     
     // Tentar extrair popular times do HTML
-    // O Google Maps embute os dados em um script JSON-LD
     const popularTimes: any = {
       monday: Array(24).fill(0),
       tuesday: Array(24).fill(0),
@@ -629,15 +634,22 @@ const scrapePopularTimes = async (placeName: string, googleMapsUri: string): Pro
     
     // Procurar por scripts que contenham dados de popular times
     const scripts = $('script[type="application/ld+json"]');
+    console.log(`[Scraping] 📜 Scripts JSON-LD encontrados: ${scripts.length}`);
+    
+    let dataExtracted = false;
     
     scripts.each((i: number, elem: any) => {
       try {
         const scriptContent = $(elem).html();
         if (scriptContent) {
+          console.log(`[Scraping] 📝 Processando script ${i + 1}...`);
           const data = JSON.parse(scriptContent);
+          
+          console.log(`[Scraping] 🔑 Chaves no script: ${Object.keys(data).join(', ')}`);
           
           // Tentar extrair popular times de diferentes formatos
           if (data.popularTimes && Array.isArray(data.popularTimes)) {
+            console.log(`[Scraping] 🎯 popularTimes encontrado!`);
             data.popularTimes.forEach((day: any, index: number) => {
               const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
               const dayName = dayNames[index];
@@ -647,20 +659,28 @@ const scrapePopularTimes = async (placeName: string, googleMapsUri: string): Pro
                   // Normalizar para 0-100
                   return Math.min(100, Math.max(0, hour.value || hour || 0));
                 });
+                console.log(`[Scraping] ✅ ${dayName}: ${day.popularity.length} horários extraídos`);
+                dataExtracted = true;
               }
             });
           }
         }
       } catch (parseError) {
-        // Ignorar erros de parsing
+        console.log(`[Scraping] ⚠️ Erro ao processar script ${i + 1}:`, parseError);
       }
     });
     
-    console.log(`[Scraping] Popular times extraídos para: ${placeName}`);
-    return popularTimes;
+    if (dataExtracted) {
+      console.log(`[Scraping] ✅ Popular times extraídos com sucesso para: ${placeName}`);
+      console.log(`[Scraping] 📊 Exemplo (monday): [${popularTimes.monday.slice(0, 5).join(', ')}, ...]`);
+      return popularTimes;
+    } else {
+      console.log(`[Scraping] ⚠️ Nenhum dado extraído para: ${placeName}`);
+      return null;
+    }
     
   } catch (error) {
-    console.error(`[Scraping] Erro ao fazer scraping para ${placeName}:`, error);
+    console.error(`[Scraping] ❌ Erro ao fazer scraping para ${placeName}:`, error);
     return null;
   }
 };
@@ -849,9 +869,11 @@ app.post('/places/update-all-hours', authenticate, async (req: express.Request, 
   }
 });
 
-// Endpoint para fazer scraping de Popular Times
+// Endpoint para fazer scraping de Popular Times com logs detalhados
 app.post('/places/scrape-popular-times', authenticate, async (req: express.Request, res: express.Response): Promise<void> => {
   try {
+    const results: any[] = [];
+    
     console.log('[Scraping] Iniciando scraping de Popular Times...');
     
     // Buscar todos os lugares
@@ -863,20 +885,47 @@ app.post('/places/scrape-popular-times', authenticate, async (req: express.Reque
     let successCount = 0;
     let errorCount = 0;
     
-    for (const place of places) {
+    for (let i = 0; i < places.length; i++) {
+      const place = places[i];
+      const result: any = {
+        placeName: place.name,
+        placeId: place.id,
+        status: 'processing',
+        logs: [],
+        data: null,
+        error: null
+      };
+      
       try {
-        console.log(`[Scraping] Processando: ${place.name}`);
+        result.logs.push(`🔍 Iniciando scraping para: ${place.name}`);
+        console.log(`[Scraping] [${i + 1}/${places.length}] Processando: ${place.name}`);
         
         // Buscar googleMapsUri no Firestore
         if (!place.googleMapsUri) {
-          console.log(`[Scraping] Place sem googleMapsUri, pulando: ${place.name}`);
+          result.status = 'skipped';
+          result.logs.push('⚠️ Place sem googleMapsUri, pulando');
+          result.error = 'Sem URL do Google Maps';
+          results.push(result);
+          errorCount++;
           continue;
         }
+        
+        result.logs.push(`📍 URL: ${place.googleMapsUri.substring(0, 50)}...`);
         
         // Fazer scraping
         const scrapedPopularTimes = await scrapePopularTimes(place.name, place.googleMapsUri);
         
         if (scrapedPopularTimes) {
+          result.logs.push('✅ Dados extraídos com sucesso!');
+          result.status = 'success';
+          result.data = {
+            hasData: true,
+            sample: {
+              monday: scrapedPopularTimes.monday.slice(0, 5),
+              friday: scrapedPopularTimes.friday.slice(0, 5)
+            }
+          };
+          
           // Atualizar no Firestore
           const placeRef = db.collection('places').doc(place.id);
           await placeRef.update({
@@ -885,27 +934,40 @@ app.post('/places/scrape-popular-times', authenticate, async (req: express.Reque
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           });
           
+          result.logs.push('💾 Dados salvos no Firestore');
           successCount++;
           console.log(`[Scraping] ✅ Popular times atualizado para: ${place.name}`);
         } else {
+          result.status = 'no_data';
+          result.error = 'Não foi possível extrair popular times';
+          result.logs.push('⚠️ Nenhum dado extraído');
           errorCount++;
           console.log(`[Scraping] ❌ Não foi possível extrair popular times para: ${place.name}`);
         }
         
+        results.push(result);
+        
         // Aguardar 2 segundos entre requisições para evitar bloqueio
         await new Promise(resolve => setTimeout(resolve, 2000));
         
-      } catch (error) {
+      } catch (error: any) {
+        result.status = 'error';
+        result.error = error.message;
+        result.logs.push(`❌ Erro: ${error.message}`);
         console.error(`[Scraping] Erro ao processar ${place.name}:`, error);
         errorCount++;
+        results.push(result);
       }
     }
+    
+    console.log('[Scraping] Scraping concluído');
     
     res.json({
       message: 'Scraping concluído',
       total: places.length,
       success: successCount,
-      errors: errorCount
+      errors: errorCount,
+      results: results
     });
     
   } catch (error) {
