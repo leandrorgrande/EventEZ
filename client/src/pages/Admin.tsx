@@ -11,7 +11,6 @@ import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { 
   Shield, 
-  Building2, 
   Users, 
   MapPin, 
   Calendar, 
@@ -28,11 +27,6 @@ export default function Admin() {
   const [isScraping, setIsScraping] = useState(false);
 
   // Queries (enabled only if admin to prevent unnecessary calls)
-  const { data: businessClaims = [] } = useQuery({
-    queryKey: ["/api/business-claims"],
-    enabled: !!isAdmin,
-  });
-
   const { data: allUsers = [] } = useQuery({
     queryKey: ["/api/users"],
     enabled: !!isAdmin,
@@ -59,12 +53,14 @@ export default function Admin() {
     },
   });
 
-  const { data: allEvents = [] } = useQuery({
+  const { data: allEvents = [], isLoading: eventsLoading } = useQuery({
     queryKey: ["/api/events-all"],
     enabled: !!isAdmin,
     queryFn: async () => {
       const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
       const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      
+      console.log('[Admin] Buscando eventos com approvalStatus=all...');
       
       const response = await fetch(`${API_URL}/events?approvalStatus=all`, {
         headers: {
@@ -72,8 +68,15 @@ export default function Admin() {
         }
       });
       
-      if (!response.ok) throw new Error(`Failed to fetch events: ${response.status}`);
-      return response.json();
+      if (!response.ok) {
+        console.error('[Admin] Erro ao buscar eventos:', response.status);
+        throw new Error(`Failed to fetch events: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Admin] Eventos retornados da API:', data.length);
+      console.log('[Admin] Primeiro evento:', data[0]);
+      return data;
     },
   });
 
@@ -172,9 +175,7 @@ export default function Admin() {
     );
   }
 
-  const pendingClaims = Array.isArray(businessClaims) ? businessClaims.filter((c: any) => c.status === "pending") : [];
-  const approvedClaims = Array.isArray(businessClaims) ? businessClaims.filter((c: any) => c.status === "approved") : [];
-  const rejectedClaims = Array.isArray(businessClaims) ? businessClaims.filter((c: any) => c.status === "rejected") : [];
+
 
   return (
     <div className="min-h-screen bg-slate-900 text-white pb-20">
@@ -189,7 +190,7 @@ export default function Admin() {
       </div>
 
       <div className="p-4">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 gap-4 mb-6">
           <Card className="bg-slate-800 border-slate-700">
             <CardContent className="p-4 text-center">
               <Users className="h-8 w-8 text-blue-400 mx-auto mb-2" />
@@ -205,20 +206,6 @@ export default function Admin() {
               <div className="text-xs text-yellow-400 mt-1">{pendingEvents.length} pending</div>
             </CardContent>
           </Card>
-          <Card className="bg-slate-800 border-slate-700">
-            <CardContent className="p-4 text-center">
-              <Building2 className="h-8 w-8 text-purple-400 mx-auto mb-2" />
-              <div className="text-2xl font-bold text-white">{Array.isArray(businessClaims) ? businessClaims.length : 0}</div>
-              <div className="text-sm text-gray-400">Business Claims</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-slate-800 border-slate-700">
-            <CardContent className="p-4 text-center">
-              <Clock className="h-8 w-8 text-yellow-400 mx-auto mb-2" />
-              <div className="text-2xl font-bold text-white">{pendingClaims.length}</div>
-              <div className="text-sm text-gray-400">Pending Claims</div>
-            </CardContent>
-          </Card>
         </div>
 
         <Tabs defaultValue="events" className="space-y-4">
@@ -229,6 +216,25 @@ export default function Admin() {
           </TabsList>
 
           <TabsContent value="events" className="space-y-4">
+            {eventsLoading && (
+              <Card className="bg-slate-800 border-slate-700">
+                <CardContent className="p-8 text-center">
+                  <Clock className="h-16 w-16 text-gray-400 mx-auto mb-4 animate-pulse" />
+                  <p className="text-gray-400">Loading events...</p>
+                </CardContent>
+              </Card>
+            )}
+            
+            {!eventsLoading && pendingEvents.length === 0 && approvedEvents.length === 0 && rejectedEvents.length === 0 && (
+              <Card className="bg-slate-800 border-slate-700">
+                <CardContent className="p-8 text-center">
+                  <Calendar className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-400">No events found</p>
+                  <p className="text-gray-500 text-sm mt-2">Total eventos no Firestore: {Array.isArray(allEvents) ? allEvents.length : 0}</p>
+                </CardContent>
+              </Card>
+            )}
+            
             {pendingEvents.length > 0 && (
               <Card className="bg-slate-800 border-slate-700">
                 <CardHeader>
