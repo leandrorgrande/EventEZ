@@ -359,12 +359,21 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-slate-900 text-white pb-20">
       <div className="bg-slate-800/90 backdrop-blur-md border-b border-slate-700 p-6">
-        <div className="flex items-center space-x-3">
-          <Shield className="h-8 w-8 text-blue-400" />
-          <div>
-            <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-            <p className="text-gray-400">Manage users, events, and business claims</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <Shield className="h-8 w-8 text-blue-400" />
+            <div>
+              <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+              <p className="text-gray-400">Manage users, events, and business claims</p>
+            </div>
           </div>
+          <Button 
+            onClick={() => window.location.href = '/admin/popular-times'}
+            className="bg-purple-600 hover:bg-purple-700"
+          >
+            <Clock className="h-4 w-4 mr-2" />
+            Popular Times
+          </Button>
         </div>
       </div>
 
