@@ -102,6 +102,42 @@ app.post('/users/make-admin', async (req: express.Request, res: express.Response
 
 // ============ EVENTS ============
 
+// Rota de DEBUG para listar TODOS os eventos sem filtro
+app.get('/events/debug', authenticate, async (req: express.Request, res: express.Response) => {
+  try {
+    console.log('[DEBUG] Iniciando busca de eventos no Firestore...');
+    
+    const snapshot = await db.collection('events').get();
+    console.log('[DEBUG] Snapshot obtido. Vazio?', snapshot.empty);
+    console.log('[DEBUG] Número de documentos:', snapshot.size);
+    
+    const events = snapshot.docs.map(doc => {
+      const data = doc.data();
+      console.log('[DEBUG] Documento ID:', doc.id);
+      console.log('[DEBUG] Dados completos:', JSON.stringify(data, null, 2));
+      return { id: doc.id, ...data };
+    });
+    
+    console.log('[DEBUG] Total de eventos mapeados:', events.length);
+    
+    res.json({
+      total: events.length,
+      snapshotEmpty: snapshot.empty,
+      snapshotSize: snapshot.size,
+      events: events,
+      collectionPath: 'events',
+      message: 'Debug completo - todos os eventos sem filtro'
+    });
+  } catch (error: any) {
+    console.error('[DEBUG] ERRO:', error);
+    res.status(500).json({ 
+      error: error.message,
+      stack: error.stack,
+      message: "Erro ao buscar eventos (debug)" 
+    });
+  }
+});
+
 app.get('/events', authenticate, async (req: express.Request, res: express.Response) => {
   try {
     const eventType = req.query.eventType as string;

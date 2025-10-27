@@ -36,6 +36,8 @@ export default function Admin() {
   const [updatingPlaces, setUpdatingPlaces] = useState<Set<string>>(new Set());
   const [editingPlace, setEditingPlace] = useState<{ id: string; name: string; currentUrl?: string } | null>(null);
   const [manualGoogleMapsUrl, setManualGoogleMapsUrl] = useState('');
+  const [debugEventsData, setDebugEventsData] = useState<any>(null);
+  const [isLoadingDebug, setIsLoadingDebug] = useState(false);
 
   // Queries (enabled only if admin to prevent unnecessary calls)
   const { data: allUsers = [] } = useQuery({
@@ -252,6 +254,46 @@ export default function Admin() {
     }
   };
 
+  // Função para buscar eventos em modo debug
+  const fetchDebugEvents = async () => {
+    try {
+      setIsLoadingDebug(true);
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      
+      console.log('[Admin] Buscando eventos em modo debug...');
+      
+      const response = await fetch(`${API_URL}/events/debug`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Admin] Erro na resposta:', errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Admin] Dados de debug recebidos:', data);
+      setDebugEventsData(data);
+      toast({ 
+        title: "Debug concluído", 
+        description: `${data.total} eventos encontrados no Firestore` 
+      });
+    } catch (error: any) {
+      console.error('[Admin] Erro ao buscar eventos debug:', error);
+      toast({ 
+        title: "Erro no debug", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    } finally {
+      setIsLoadingDebug(false);
+    }
+  };
+
   // Mutation para atualizar googleMapsUri
   const updateGoogleMapsUriMutation = useMutation({
     mutationFn: async ({ placeId, googleMapsUri }: { placeId: string; googleMapsUri: string }) => {
@@ -359,6 +401,76 @@ export default function Admin() {
           </TabsList>
 
           <TabsContent value="events" className="space-y-4">
+            {/* Botão de Debug */}
+            <Card className="bg-blue-900/20 border-2 border-blue-700">
+              <CardHeader>
+                <CardTitle className="text-blue-400 flex items-center justify-between">
+                  <span>🔍 Debug de Eventos</span>
+                  <Button 
+                    onClick={fetchDebugEvents} 
+                    disabled={isLoadingDebug}
+                    variant="outline"
+                    size="sm"
+                  >
+                    {isLoadingDebug ? (
+                      <>
+                        <Clock className="h-4 w-4 mr-2 animate-spin" /> Carregando...
+                      </>
+                    ) : (
+                      <>
+                        <Calendar className="h-4 w-4 mr-2" /> Buscar Eventos (Debug)
+                      </>
+                    )}
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              {debugEventsData && (
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-slate-700 rounded p-3">
+                        <p className="text-xs text-gray-400">Total Firestore</p>
+                        <p className="text-2xl font-bold text-white">{debugEventsData.total}</p>
+                      </div>
+                      <div className="bg-slate-700 rounded p-3">
+                        <p className="text-xs text-gray-400">Snapshot Size</p>
+                        <p className="text-2xl font-bold text-white">{debugEventsData.snapshotSize}</p>
+                      </div>
+                      <div className="bg-slate-700 rounded p-3">
+                        <p className="text-xs text-gray-400">Collection Path</p>
+                        <p className="text-sm font-bold text-white">{debugEventsData.collectionPath}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-slate-700 rounded p-4 max-h-96 overflow-y-auto">
+                      <h4 className="text-sm font-semibold text-white mb-2">Eventos Encontrados:</h4>
+                      {debugEventsData.events && debugEventsData.events.length > 0 ? (
+                        <div className="space-y-2">
+                          {debugEventsData.events.map((event: any, idx: number) => (
+                            <div key={idx} className="bg-slate-800 rounded p-3 text-xs">
+                              <p className="text-white font-semibold">ID: {event.id}</p>
+                              <p className="text-gray-300">Title: {event.title || 'N/A'}</p>
+                              <p className="text-gray-300">Status: <Badge className={
+                                event.approvalStatus === 'approved' ? 'bg-green-600' :
+                                event.approvalStatus === 'pending' ? 'bg-yellow-600' :
+                                'bg-red-600'
+                              }>{event.approvalStatus || 'N/A'}</Badge></p>
+                              <p className="text-gray-400 mt-2">Dados completos:</p>
+                              <pre className="text-xs text-gray-400 mt-1 overflow-x-auto">
+                                {JSON.stringify(event, null, 2)}
+                              </pre>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-gray-400">Nenhum evento encontrado</p>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+
             {eventsLoading && (
               <Card className="bg-slate-800 border-slate-700">
                 <CardContent className="p-8 text-center">
