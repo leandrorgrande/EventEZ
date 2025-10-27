@@ -25,6 +25,9 @@ export default function Admin() {
   const queryClient = useQueryClient();
   const [scrapingResults, setScrapingResults] = useState<any>(null);
   const [isScraping, setIsScraping] = useState(false);
+  const [scrapingLogs, setScrapingLogs] = useState<any[]>([]);
+  const [currentScraping, setCurrentScraping] = useState<any>(null);
+  const [scrapingSummary, setScrapingSummary] = useState<any>(null);
 
   // Queries (enabled only if admin to prevent unnecessary calls)
   const { data: allUsers = [] } = useQuery({
@@ -122,23 +125,61 @@ export default function Admin() {
       const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
       const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
       
+      // Limpar logs anteriores
+      setScrapingLogs([]);
+      setCurrentScraping(null);
+      setScrapingSummary(null);
+      
       const response = await fetch(`${API_URL}/places/scrape-popular-times`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
         }
       });
       
       if (!response.ok) throw new Error(`Failed to scrape`);
-      return response.json();
+      
+      // Processar Server-Sent Events
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      
+      if (!reader) throw new Error('No reader available');
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = JSON.parse(line.substring(6));
+            
+            if (data.type === 'start') {
+              toast({ title: "Scraping iniciado", description: `Processando ${data.total} lugares...` });
+            } else if (data.type === 'progress') {
+              setCurrentScraping(data.result);
+            } else if (data.type === 'result') {
+              setScrapingLogs(prev => [...prev, data.result]);
+              setCurrentScraping(null);
+            } else if (data.type === 'complete') {
+              setScrapingSummary(data.summary);
+              toast({ 
+                title: "Scraping concluído", 
+                description: `${data.summary.success} sucesso, ${data.summary.errors} erros, ${data.summary.skipped} pulados` 
+              });
+            } else if (data.type === 'error') {
+              throw new Error(data.message);
+            }
+          }
+        }
+      }
+      
+      return { success: true };
     },
-    onSuccess: (data) => {
-      setScrapingResults(data);
-      toast({ title: "Scraping concluído", description: `${data.success} lugares atualizados, ${data.errors} erros` });
-    },
-    onError: () => {
-      toast({ title: "Erro no scraping", description: "Erro ao executar scraping", variant: "destructive" });
+    onError: (error) => {
+      toast({ title: "Erro no scraping", description: error.message, variant: "destructive" });
     },
     onSettled: () => setIsScraping(false),
   });
@@ -371,13 +412,82 @@ export default function Admin() {
                 <Button onClick={() => { setIsScraping(true); scrapeMutation.mutate(); }} disabled={isScraping} className="w-full" size="lg">
                   {isScraping ? <><Clock className="h-4 w-4 mr-2 animate-spin" /> Executando...</> : <><MapPin className="h-4 w-4 mr-2" /> Iniciar Scraping</>}
                 </Button>
-                {scrapingResults && (
-                  <div className="mt-6 space-y-4">
-                    <div className="grid grid-cols-3 gap-4">
-                      <Card className="bg-slate-700 border-slate-600"><CardContent className="pt-4"><p className="text-sm text-gray-400">Total</p><p className="text-2xl font-bold">{scrapingResults.total}</p></CardContent></Card>
-                      <Card className="bg-green-900/20 border-green-800"><CardContent className="pt-4"><p className="text-sm text-green-300">Sucesso</p><p className="text-2xl font-bold text-green-400">{scrapingResults.success}</p></CardContent></Card>
-                      <Card className="bg-red-900/20 border-red-800"><CardContent className="pt-4"><p className="text-sm text-red-300">Erros</p><p className="text-2xl font-bold text-red-400">{scrapingResults.errors}</p></CardContent></Card>
-                    </div>
+                
+                {/* Resumo do scraping */}
+                {scrapingSummary && (
+                  <div className="grid grid-cols-4 gap-4 mb-4">
+                    <Card className="bg-slate-700 border-slate-600"><CardContent className="pt-4"><p className="text-sm text-gray-400">Total</p><p className="text-2xl font-bold">{scrapingSummary.total}</p></CardContent></Card>
+                    <Card className="bg-green-900/20 border-green-800"><CardContent className="pt-4"><p className="text-sm text-green-300">Sucesso</p><p className="text-2xl font-bold text-green-400">{scrapingSummary.success}</p></CardContent></Card>
+                    <Card className="bg-red-900/20 border-red-800"><CardContent className="pt-4"><p className="text-sm text-red-300">Erros</p><p className="text-2xl font-bold text-red-400">{scrapingSummary.errors}</p></CardContent></Card>
+                    <Card className="bg-yellow-900/20 border-yellow-800"><CardContent className="pt-4"><p className="text-sm text-yellow-300">Pulados</p><p className="text-2xl font-bold text-yellow-400">{scrapingSummary.skipped}</p></CardContent></Card>
+                  </div>
+                )}
+                
+                {/* Item sendo processado atualmente */}
+                {currentScraping && (
+                  <Card className="bg-blue-900/20 border border-blue-800">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <Clock className="h-5 w-5 text-blue-400 animate-spin" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-blue-300">
+                            Processando: {currentScraping.placeName}
+                          </p>
+                          <p className="text-xs text-blue-400">
+                            {currentScraping.index}/{currentScraping.total}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                
+                {/* Logs detalhados em tempo real */}
+                {scrapingLogs.length > 0 && (
+                  <div className="max-h-96 overflow-y-auto space-y-2">
+                    <h4 className="text-sm font-semibold text-gray-300 mb-2">Logs de Processamento:</h4>
+                    {scrapingLogs.map((log, index) => (
+                      <Card 
+                        key={index} 
+                        className={`border ${
+                          log.status === 'success' ? 'bg-green-900/10 border-green-800' :
+                          log.status === 'error' ? 'bg-red-900/10 border-red-800' :
+                          log.status === 'skipped' ? 'bg-yellow-900/10 border-yellow-800' :
+                          'bg-slate-700/50 border-slate-600'
+                        }`}
+                      >
+                        <CardContent className="p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                {log.status === 'success' && <CheckCircle className="h-4 w-4 text-green-400" />}
+                                {log.status === 'error' && <XCircle className="h-4 w-4 text-red-400" />}
+                                {log.status === 'skipped' && <Clock className="h-4 w-4 text-yellow-400" />}
+                                <span className="font-medium text-white">{log.placeName}</span>
+                              </div>
+                              <div className="space-y-1 text-xs text-gray-400">
+                                {log.logs.map((logItem: string, logIndex: number) => (
+                                  <p key={logIndex}>{logItem}</p>
+                                ))}
+                              </div>
+                              {log.data && (
+                                <div className="mt-2 text-xs">
+                                  <Badge className="bg-green-700">Dias: {log.data.totalDays}</Badge>
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {log.duration}ms
+                            </div>
+                          </div>
+                          {log.error && (
+                            <div className="mt-2 text-xs text-red-400">
+                              ❌ {log.error}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
                 )}
               </CardContent>
