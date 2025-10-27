@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 
 export default function Profile() {
-  const { user } = useAuth();
+  const { user, userProfile, isAdmin } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [editProfileOpen, setEditProfileOpen] = useState(false);
@@ -28,7 +28,7 @@ export default function Profile() {
     queryKey: ["/api/events-all-profile"],
     queryFn: async () => {
       console.log('[Profile] Buscando eventos...');
-      console.log('[Profile] User ID:', user?.id);
+      console.log('[Profile] User ID:', userProfile?.id);
       const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
       const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
       
@@ -53,12 +53,12 @@ export default function Profile() {
       console.log('[Profile] Eventos:', data);
       return data;
     },
-    enabled: !!user?.id,
+    enabled: !!userProfile?.id,
   });
 
   // Filtrar eventos do usuário atual (todos, independente de status)
   const userEvents = allEvents?.filter((event: any) => {
-    const matches = event.creatorId === user?.id;
+    const matches = event.creatorId === userProfile?.id;
     console.log('[Profile] Evento:', event.title, 'creatorId:', event.creatorId, 'matches:', matches);
     return matches;
   }) || [];
@@ -82,7 +82,7 @@ export default function Profile() {
     }
   };
 
-  if (!user) {
+  if (!userProfile) {
     return (
       <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
         <div className="text-center">
@@ -101,20 +101,20 @@ export default function Profile() {
       <div className="bg-slate-800/90 backdrop-blur-md border-b border-slate-700 p-6">
         <div className="flex items-center space-x-4">
           <Avatar className="h-16 w-16">
-            <AvatarImage src={user.profileImageUrl || ""} alt={user.firstName || "User"} />
+            <AvatarImage src={userProfile.profileImageUrl || ""} alt={userProfile.firstName || "User"} />
             <AvatarFallback className="bg-blue-600 text-white text-lg">
-              {(user.firstName?.[0] || user.email?.[0] || "U").toUpperCase()}
+              {(userProfile.firstName?.[0] || userProfile.email?.[0] || "U").toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1">
             <h1 className="text-2xl font-bold" data-testid="text-user-name">
-              {user.firstName && user.lastName 
-                ? `${user.firstName} ${user.lastName}`
-                : user.email}
+              {userProfile.firstName && userProfile.lastName 
+                ? `${userProfile.firstName} ${userProfile.lastName}`
+                : userProfile.email}
             </h1>
-            <p className="text-gray-400" data-testid="text-user-email">{user.email}</p>
+            <p className="text-gray-400" data-testid="text-user-email">{userProfile.email}</p>
             <Badge variant="secondary" className="mt-1">
-              {user.userType === "business" ? "Business" : "Regular User"}
+              {userProfile.userType === "business" ? "Business" : userProfile.userType === "admin" ? "Admin" : "Regular User"}
             </Badge>
           </div>
           <Button
@@ -239,7 +239,7 @@ export default function Profile() {
             Event History
           </Button>
 
-          {user.userType === "admin" && (
+          {isAdmin && (
             <Button
               variant="ghost"
               onClick={() => setLocation("/admin")}
@@ -251,7 +251,7 @@ export default function Profile() {
             </Button>
           )}
 
-          {user.userType !== "business" && (
+          {userProfile.userType !== "business" && (
             <Button
               variant="ghost"
               className="w-full justify-start text-white hover:bg-slate-700/50"
