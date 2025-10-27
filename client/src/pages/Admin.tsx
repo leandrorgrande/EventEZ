@@ -81,6 +81,11 @@ export default function Admin() {
   const pendingEvents = Array.isArray(allEvents) ? allEvents.filter((e: any) => e.approvalStatus === 'pending') : [];
   const approvedEvents = Array.isArray(allEvents) ? allEvents.filter((e: any) => e.approvalStatus === 'approved') : [];
   const rejectedEvents = Array.isArray(allEvents) ? allEvents.filter((e: any) => e.approvalStatus === 'rejected') : [];
+  
+  console.log('[Admin] Total eventos:', Array.isArray(allEvents) ? allEvents.length : 0);
+  console.log('[Admin] Pendentes:', pendingEvents.length);
+  console.log('[Admin] Aprovados:', approvedEvents.length);
+  console.log('[Admin] Rejeitados:', rejectedEvents.length);
 
   // Mutations
   const updateEventMutation = useMutation({
