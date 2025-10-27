@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { db } from "@/lib/firebase";
+import { collection, getDocs, query as fsQuery, where } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,15 +15,59 @@ export default function Events() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: events, isLoading } = useQuery({
-    queryKey: ["/api/events", { eventType: filterType !== "all" ? filterType : undefined, approvalStatus: "approved" }],
+    queryKey: ["firestore/events", { eventType: filterType }],
+    queryFn: async () => {
+      const eventsRef = collection(db, "events");
+      const constraints: any[] = [where("approvalStatus", "==", "approved")];
+      if (filterType && filterType !== "all") {
+        constraints.push(where("eventType", "==", filterType));
+      }
+
+      const q = constraints.length > 0 ? fsQuery(eventsRef, ...constraints) : eventsRef;
+      const snapshot = await getDocs(q as any);
+      const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as any));
+      // Ordenar por data de início (mais recentes primeiro)
+      items.sort((a: any, b: any) => new Date(b.startDateTime).getTime() - new Date(a.startDateTime).getTime());
+      return items;
+    },
   });
 
   const filteredEvents = events?.filter((event: any) => 
     event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     event.description?.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
+
+  const joinMutation = useMutation({
+    mutationFn: async (eventId: string) => {
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = (await import('@/lib/firebase')).auth.currentUser ? await (await import('@/lib/firebase')).auth.currentUser?.getIdToken() : undefined;
+      const res = await fetch(`${API_URL}/events/${eventId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ join: true })
+      });
+      if (!res.ok) throw new Error('Falha ao participar do evento');
+      return res.json();
+    },
+    onSuccess: () => {
+      // Recarregar lista
+      queryClient.invalidateQueries({ queryKey: ["firestore/events", { eventType: filterType }] });
+      // Feedback
+      // Usando lazy import do toast para evitar ciclo
+      import('@/hooks/use-toast').then(({ useToast }) => {
+        try {
+          const { toast } = useToast();
+          toast({ title: 'Legal! 🎉', description: 'Você vai participar deste evento.' });
+        } catch {}
+      });
+    }
+  });
 
   return (
     <div className="min-h-screen bg-slate-900 text-white pb-20">
@@ -110,7 +156,7 @@ export default function Events() {
         ) : (
           <div className="space-y-4">
             {filteredEvents.map((event: any) => (
-              <EventCard key={event.id} event={event} />
+              <EventCard key={event.id} event={event} onJoin={(id) => joinMutation.mutate(id)} />
             ))}
           </div>
         )}
