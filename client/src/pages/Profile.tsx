@@ -10,7 +10,7 @@ import EditProfileModal from "@/components/EditProfileModal";
 import BusinessClaimModal from "@/components/BusinessClaimModal";
 import SettingsModal from "@/components/SettingsModal"; // EVENTU: Added Settings modal
 import EventHistoryModal from "@/components/EventHistoryModal"; // EVENTU: Added Event History modal
-import { Settings, History, LogOut, Calendar, Users, Edit3, Building2 } from "lucide-react";
+import { Settings, History, LogOut, Calendar, Users, Edit3, Building2, Shield } from "lucide-react";
 import { signOutUser } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
@@ -238,6 +238,18 @@ export default function Profile() {
             <History className="mr-3 h-5 w-5 text-gray-400" />
             Event History
           </Button>
+
+          {user.userType === "admin" && (
+            <Button
+              variant="ghost"
+              onClick={() => setLocation("/admin")}
+              className="w-full justify-start text-blue-400 hover:bg-blue-600/20 hover:text-blue-300"
+              data-testid="button-admin"
+            >
+              <Shield className="mr-3 h-5 w-5" />
+              Admin Dashboard
+            </Button>
+          )}
 
           {user.userType !== "business" && (
             <Button
