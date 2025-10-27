@@ -28,6 +28,8 @@ export default function Admin() {
   const [scrapingLogs, setScrapingLogs] = useState<any[]>([]);
   const [currentScraping, setCurrentScraping] = useState<any>(null);
   const [scrapingSummary, setScrapingSummary] = useState<any>(null);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [updatingPlaces, setUpdatingPlaces] = useState<Set<string>>(new Set());
 
   // Queries (enabled only if admin to prevent unnecessary calls)
   const { data: allUsers = [] } = useQuery({
@@ -125,6 +127,10 @@ export default function Admin() {
       const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
       const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
       
+      // Criar novo AbortController
+      const controller = new AbortController();
+      setAbortController(controller);
+      
       // Limpar logs anteriores
       setScrapingLogs([]);
       setCurrentScraping(null);
@@ -134,7 +140,8 @@ export default function Admin() {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
-        }
+        },
+        signal: controller.signal
       });
       
       if (!response.ok) throw new Error(`Failed to scrape`);
@@ -145,35 +152,44 @@ export default function Admin() {
       
       if (!reader) throw new Error('No reader available');
       
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = JSON.parse(line.substring(6));
-            
-            if (data.type === 'start') {
-              toast({ title: "Scraping iniciado", description: `Processando ${data.total} lugares...` });
-            } else if (data.type === 'progress') {
-              setCurrentScraping(data.result);
-            } else if (data.type === 'result') {
-              setScrapingLogs(prev => [...prev, data.result]);
-              setCurrentScraping(null);
-            } else if (data.type === 'complete') {
-              setScrapingSummary(data.summary);
-              toast({ 
-                title: "Scraping concluído", 
-                description: `${data.summary.success} sucesso, ${data.summary.errors} erros, ${data.summary.skipped} pulados` 
-              });
-            } else if (data.type === 'error') {
-              throw new Error(data.message);
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = JSON.parse(line.substring(6));
+              
+              if (data.type === 'start') {
+                toast({ title: "Scraping iniciado", description: `Processando ${data.total} lugares...` });
+              } else if (data.type === 'progress') {
+                setCurrentScraping(data.result);
+              } else if (data.type === 'result') {
+                setScrapingLogs(prev => [...prev, data.result]);
+                setCurrentScraping(null);
+              } else if (data.type === 'complete') {
+                setScrapingSummary(data.summary);
+                toast({ 
+                  title: "Scraping concluído", 
+                  description: `${data.summary.success} sucesso, ${data.summary.errors} erros, ${data.summary.skipped} pulados` 
+                });
+              } else if (data.type === 'error') {
+                throw new Error(data.message);
+              }
             }
           }
         }
+      } catch (error: any) {
+        if (error.name === 'AbortError') {
+          toast({ title: "Scraping interrompido", description: "Execução cancelada pelo usuário" });
+        }
+        throw error;
+      } finally {
+        setAbortController(null);
       }
       
       return { success: true };
@@ -183,6 +199,52 @@ export default function Admin() {
     },
     onSettled: () => setIsScraping(false),
   });
+
+  // Função para atualizar um place individual
+  const updatePlaceMutation = useMutation({
+    mutationFn: async (placeId: string) => {
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      
+      setUpdatingPlaces(prev => new Set(prev).add(placeId));
+      
+      const response = await fetch(`${API_URL}/places/${placeId}/scrape`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      });
+      
+      if (!response.ok) throw new Error('Failed to update place');
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Sucesso", description: data.message });
+      // Atualizar o log correspondente
+      setScrapingLogs(prev => prev.map(log => 
+        log.placeId === data.placeName ? { ...log, status: 'success', data: data.data } : log
+      ));
+    },
+    onError: () => {
+      toast({ title: "Erro", description: "Falha ao atualizar place", variant: "destructive" });
+    },
+    onSettled: (data, error, placeId) => {
+      setUpdatingPlaces(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(placeId as string);
+        return newSet;
+      });
+    },
+  });
+
+  const handleStopScraping = () => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+      setIsScraping(false);
+      setCurrentScraping(null);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -409,9 +471,25 @@ export default function Admin() {
                     <strong>⚠️ Atenção:</strong> Este processo busca horários de pico reais do Google Maps para os lugares cadastrados no Firestore.
                   </p>
                 </div>
-                <Button onClick={() => { setIsScraping(true); scrapeMutation.mutate(); }} disabled={isScraping} className="w-full" size="lg">
-                  {isScraping ? <><Clock className="h-4 w-4 mr-2 animate-spin" /> Executando...</> : <><MapPin className="h-4 w-4 mr-2" /> Iniciar Scraping</>}
-                </Button>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button 
+                    onClick={() => { setIsScraping(true); scrapeMutation.mutate(); }} 
+                    disabled={isScraping} 
+                    className="w-full" 
+                    size="lg"
+                  >
+                    {isScraping ? <><Clock className="h-4 w-4 mr-2 animate-spin" /> Executando...</> : <><MapPin className="h-4 w-4 mr-2" /> Iniciar Scraping</>}
+                  </Button>
+                  <Button 
+                    onClick={handleStopScraping}
+                    disabled={!isScraping}
+                    variant="destructive"
+                    className="w-full"
+                    size="lg"
+                  >
+                    <XCircle className="h-4 w-4 mr-2" /> Parar
+                  </Button>
+                </div>
                 
                 {/* Resumo do scraping */}
                 {scrapingSummary && (
@@ -476,8 +554,29 @@ export default function Admin() {
                                 </div>
                               )}
                             </div>
-                            <div className="text-xs text-gray-500">
-                              {log.duration}ms
+                            <div className="flex flex-col items-end gap-2">
+                              <div className="text-xs text-gray-500">
+                                {log.duration}ms
+                              </div>
+                              {(log.status === 'error' || log.status === 'skipped' || !log.data) && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => updatePlaceMutation.mutate(log.placeId)}
+                                  disabled={updatingPlaces.has(log.placeId)}
+                                  className="text-xs"
+                                >
+                                  {updatingPlaces.has(log.placeId) ? (
+                                    <>
+                                      <Clock className="h-3 w-3 mr-1 animate-spin" /> Atualizando...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CheckCircle className="h-3 w-3 mr-1" /> Update
+                                    </>
+                                  )}
+                                </Button>
+                              )}
                             </div>
                           </div>
                           {log.error && (

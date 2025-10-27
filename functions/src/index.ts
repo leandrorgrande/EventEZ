@@ -892,6 +892,52 @@ app.post('/places/update-all-hours', authenticate, async (req: express.Request, 
   }
 });
 
+// Endpoint para atualizar um place individual
+app.post('/places/:placeId/scrape', authenticate, async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    const { placeId } = req.params;
+    
+    const placeDoc = await db.collection('places').doc(placeId).get();
+    
+    if (!placeDoc.exists) {
+      res.status(404).json({ message: "Place not found" });
+      return;
+    }
+    
+    const place = { id: placeDoc.id, ...placeDoc.data() } as any;
+    
+    if (!place.googleMapsUri) {
+      res.status(400).json({ message: "Place não tem googleMapsUri" });
+      return;
+    }
+    
+    const scrapedPopularTimes = await scrapePopularTimes(place.name, place.googleMapsUri);
+    
+    if (scrapedPopularTimes) {
+      await placeDoc.ref.update({
+        popularTimes: scrapedPopularTimes,
+        dataSource: 'scraped',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      
+      res.json({
+        success: true,
+        message: `Popular times atualizados para ${place.name}`,
+        placeName: place.name,
+        data: {
+          hasData: true,
+          totalDays: Object.keys(scrapedPopularTimes).length,
+        }
+      });
+    } else {
+      res.status(400).json({ message: "Não foi possível extrair popular times" });
+    }
+  } catch (error: any) {
+    console.error('[API] Erro ao atualizar place:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Endpoint para fazer scraping de Popular Times com logs detalhados - VERSÃO COM RESULTADOS EM TEMPO REAL
 app.post('/places/scrape-popular-times', authenticate, async (req: express.Request, res: express.Response): Promise<void> => {
   try {
