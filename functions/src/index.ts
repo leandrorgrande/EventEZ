@@ -102,13 +102,15 @@ app.post('/users/make-admin', async (req: express.Request, res: express.Response
 
 // ============ EVENTS ============
 
-app.get('/events', async (req: express.Request, res: express.Response) => {
+app.get('/events', authenticate, async (req: express.Request, res: express.Response) => {
   try {
     const eventType = req.query.eventType as string;
     const isActive = req.query.isActive === 'true';
     const approvalStatus = req.query.approvalStatus as string;
+    const user = (req as any).user;
     
     console.log('[API] GET /events - Query params:', { eventType, isActive, approvalStatus });
+    console.log('[API] User UID:', user?.uid);
     
     // Buscar TODOS os eventos primeiro
     const snapshot = await db.collection('events').get();
