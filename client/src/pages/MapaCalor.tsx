@@ -32,12 +32,32 @@ interface Place {
     sunday: number[];
   };
   types: string[];
+  // Campos adicionais usados no componente
+  rating?: number;
+  userRatingsTotal?: number;
+  formattedAddress?: string;
+  openingHours?: Record<string, any>;
 }
 
+interface ApprovedEvent {
+  id: string;
+  title: string;
+  approvalStatus?: string;
+  startDateTime?: string;
+  endDateTime?: string;
+  latitude?: number | string;
+  longitude?: number | string;
+  location?: { latitude?: number | string; longitude?: number | string; name?: string };
+}
+
+// Permitir uso global da API do Google Maps
+declare const google: any;
+
 export default function MapaCalor() {
-  const [map, setMap] = useState<google.maps.Map | null>(null);
-  const [heatmap, setHeatmap] = useState<google.maps.visualization.HeatmapLayer | null>(null);
-  const [markers, setMarkers] = useState<google.maps.Marker[]>([]);
+  const [map, setMap] = useState<any>(null);
+  const [heatmap, setHeatmap] = useState<any>(null);
+  const [markers, setMarkers] = useState<any[]>([]);
+  const [eventMarkers, setEventMarkers] = useState<any[]>([]);
   const mapRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -80,6 +100,20 @@ export default function MapaCalor() {
       const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
       const response = await fetch(`${API_URL}/places`);
       if (!response.ok) throw new Error('Failed to fetch places');
+      return response.json();
+    },
+  });
+
+  // Buscar eventos aprovados para exibir no mapa
+  const { data: events = [] } = useQuery<ApprovedEvent[]>({
+    queryKey: ["/api/events-map"],
+    queryFn: async () => {
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await auth.currentUser?.getIdToken();
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const response = await fetch(`${API_URL}/events`, { headers }); // por padrão já traz apenas aprovados
+      if (!response.ok) throw new Error('Failed to fetch events');
       return response.json();
     },
   });
@@ -220,7 +254,7 @@ export default function MapaCalor() {
 
   // Atualizar heatmap quando mudar dia, hora ou lugares
   useEffect(() => {
-    if (!map || !filteredPlaces || filteredPlaces.length === 0) return;
+    if (!map) return;
 
     // Limpar heatmap anterior
     if (heatmap) {
@@ -229,19 +263,23 @@ export default function MapaCalor() {
 
     // Limpar marcadores anteriores
     markers.forEach(marker => marker.setMap(null));
+    eventMarkers.forEach(marker => marker.setMap(null));
 
     // Gerar dados do heatmap
-    const heatmapData: google.maps.visualization.WeightedLocation[] = [];
-    const newMarkers: google.maps.Marker[] = [];
+    const heatmapData: any[] = [];
+    const newMarkers: any[] = [];
+    const newEventMarkers: any[] = [];
 
-    filteredPlaces.forEach(place => {
+    // Renderizar lugares (heatmap + marcadores por popularidade)
+    if (filteredPlaces && filteredPlaces.length > 0) {
+      filteredPlaces.forEach(place => {
       if (!place.latitude || !place.longitude || !place.popularTimes) return;
 
       const dayKey = selectedDay as keyof typeof place.popularTimes;
       const popularity = place.popularTimes[dayKey]?.[selectedHour] || 50;
 
       // Adicionar ao heatmap com peso baseado na popularidade
-      const location = new google.maps.LatLng(
+      const location = new (google as any).maps.LatLng(
         parseFloat(place.latitude.toString()),
         parseFloat(place.longitude.toString())
       );
@@ -252,10 +290,7 @@ export default function MapaCalor() {
       // Adicionar múltiplos pontos para aumentar intensidade
       const intensity = Math.ceil(weight * 10);
       for (let i = 0; i < intensity; i++) {
-        heatmapData.push({
-          location,
-          weight: weight
-        });
+        heatmapData.push({ location, weight });
       }
 
       // Adicionar marcador se popularidade > 40% (reduzido para mostrar mais lugares)
@@ -312,7 +347,57 @@ export default function MapaCalor() {
 
         newMarkers.push(marker);
       }
-    });
+      });
+    }
+
+    // Renderizar eventos aprovados (bolinha azul)
+    if (Array.isArray(events) && events.length > 0) {
+      events.forEach((ev) => {
+        const lat = ev.latitude ?? ev.location?.latitude;
+        const lng = ev.longitude ?? ev.location?.longitude;
+        const latNum = lat !== undefined ? parseFloat(lat.toString()) : undefined;
+        const lngNum = lng !== undefined ? parseFloat(lng.toString()) : undefined;
+        if (typeof latNum !== 'number' || isNaN(latNum) || typeof lngNum !== 'number' || isNaN(lngNum)) return;
+
+        const location = new google.maps.LatLng(latNum, lngNum);
+        const marker = new google.maps.Marker({
+          position: location,
+          map,
+          title: `Evento: ${ev.title || ''}`,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: '#3B82F6', // azul
+            fillOpacity: 0.95,
+            strokeColor: '#ffffff',
+            strokeWeight: 2,
+          }
+        });
+
+        const infoWindow = new google.maps.InfoWindow({
+          content: `
+            <div style="padding: 10px; font-family: Arial, sans-serif; min-width: 200px;">
+              <h3 style="margin: 0 0 8px 0; color: #1f2937; font-size: 16px;">🎫 ${ev.title || 'Evento'}</h3>
+              ${ev.startDateTime ? `<p style="margin:0; color:#6b7280; font-size:13px;">Início: ${new Date(ev.startDateTime).toLocaleString('pt-BR')}</p>` : ''}
+              ${ev.endDateTime ? `<p style="margin:0; color:#6b7280; font-size:13px;">Fim: ${new Date(ev.endDateTime).toLocaleString('pt-BR')}</p>` : ''}
+              <div style="margin-top:10px; display:flex; align-items:center; gap:8px;">
+                <div style="width:10px; height:10px; border-radius:50%; background:#3B82F6;"></div>
+                <span style="font-size:12px; color:#1f2937;">Evento</span>
+              </div>
+              <button 
+                onclick="window.open('https://www.google.com/maps/search/?api=1&query=${latNum},${lngNum}', '_blank')"
+                style="margin-top: 10px; width: 100%; padding: 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;"
+              >
+                Ver no Google Maps
+              </button>
+            </div>
+          `
+        });
+
+        marker.addListener('click', () => infoWindow.open(map, marker));
+        newEventMarkers.push(marker);
+      });
+    }
 
     // Criar novo heatmap
     const heatmapLayer = new google.maps.visualization.HeatmapLayer({
@@ -333,7 +418,7 @@ export default function MapaCalor() {
     });
 
     // Adicionar listener de clique no mapa para mostrar lugares próximos
-    const mapClickListener = map.addListener('click', (e: google.maps.MapMouseEvent) => {
+    const mapClickListener = map.addListener('click', (e: any) => {
       if (!e.latLng) return;
       
       const clickedLat = e.latLng.lat();
@@ -354,11 +439,11 @@ export default function MapaCalor() {
       });
       
       if (nearbyPlaces.length > 0) {
-        const dayKey = selectedDay as keyof typeof nearbyPlaces[0].popularTimes;
+        const dayKey: any = selectedDay;
         
         const placesHtml = nearbyPlaces
           .map(p => {
-            const pop = p.popularTimes[dayKey]?.[selectedHour] || 50;
+            const pop = (p as any).popularTimes?.[dayKey]?.[selectedHour] || 50;
             const statusLabel = pop === 0 ? '🔒 Fechado' : `Movimento ${getPopularityLabel(pop)}`;
             const statusColor = pop === 0 ? '#ef4444' : getColorByPopularity(pop);
             return `
@@ -393,12 +478,13 @@ export default function MapaCalor() {
 
     setHeatmap(heatmapLayer);
     setMarkers(newMarkers);
+    setEventMarkers(newEventMarkers);
     
     // Cleanup
     return () => {
       google.maps.event.removeListener(mapClickListener);
     };
-  }, [map, places, selectedDay, selectedHour, selectedType, minRating]);
+  }, [map, places, events, selectedDay, selectedHour, selectedType, minRating]);
 
   // Funções auxiliares
   const getColorByPopularity = (popularity: number): string => {
@@ -648,6 +734,10 @@ export default function MapaCalor() {
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-full bg-red-500"></div>
                 <span>Muito Cheio</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded-full bg-blue-500"></div>
+                <span>Evento</span>
               </div>
             </div>
           </>
