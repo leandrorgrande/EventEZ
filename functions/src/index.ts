@@ -542,6 +542,7 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
         longitude: place.location?.longitude?.toString() || null,
         rating: place.rating || null,
         userRatingsTotal: place.userRatingCount || 0,
+        googleMapsUri: place.googleMapsUri || null, // ⭐ URL DO GOOGLE MAPS PARA SCRAPING
         isOpen: isOpenValue, // ⭐ STATUS ATUAL (aberto/fechado AGORA)
         types: place.primaryType ? [place.primaryType] : [],
         openingHours: openingHours, // ⭐ HORÁRIOS DE FUNCIONAMENTO POR DIA
