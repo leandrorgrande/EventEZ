@@ -36,6 +36,27 @@ export default function Admin() {
   const { data: allUsers = [] } = useQuery({
     queryKey: ["/api/users"],
     enabled: !!isAdmin,
+    queryFn: async () => {
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      
+      console.log('[Admin] Buscando usuários...');
+      
+      const response = await fetch(`${API_URL}/users`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        console.error('[Admin] Erro ao buscar usuários:', response.status);
+        throw new Error(`Failed to fetch users: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Admin] Usuários retornados:', data.length);
+      return data;
+    },
   });
 
   const { data: allEvents = [] } = useQuery({

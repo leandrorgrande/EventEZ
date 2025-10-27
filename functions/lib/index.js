@@ -66,6 +66,19 @@ const authenticate = async (req, res, next) => {
 // Helper functions
 const db = admin.firestore();
 // ============ USERS ============
+// Get all users (admin only)
+app.get('/users', authenticate, async (req, res) => {
+    try {
+        const usersSnapshot = await db.collection('users').get();
+        const users = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log(`[API] Retornando ${users.length} usuários`);
+        res.json(users);
+    }
+    catch (error) {
+        console.error('[API] Erro ao buscar usuários:', error);
+        res.status(500).json({ message: "Failed to fetch users" });
+    }
+});
 app.get('/users/:id', authenticate, async (req, res) => {
     try {
         const { id } = req.params;
