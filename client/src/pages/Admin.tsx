@@ -28,45 +28,16 @@ export default function Admin() {
   const [scrapingResults, setScrapingResults] = useState<any>(null);
   const [isScraping, setIsScraping] = useState(false);
 
-  // Show loading while checking auth
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
-        <div className="text-center">
-          <Shield className="h-16 w-16 text-blue-400 mx-auto mb-4 animate-pulse" />
-          <p className="text-gray-400">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Check if user is admin
-  if (!isAdmin) {
-    return (
-      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
-        <div className="text-center">
-          <Shield className="h-16 w-16 text-red-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-4">Access Denied</h2>
-          <p className="text-gray-400 mb-2">This page is restricted to administrators only.</p>
-          <p className="text-sm text-yellow-400 mb-6">
-            Your user type: {userProfile?.userType || 'none'}
-          </p>
-          <Button onClick={() => window.location.href = "/"}>
-            Go to Home
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   // Fetch business claims
   const { data: businessClaims = [], isLoading: claimsLoading } = useQuery({
     queryKey: ["/api/business-claims"],
+    enabled: !!isAdmin, // Only fetch if admin
   });
 
   // Fetch all users
   const { data: allUsers = [], isLoading: usersLoading } = useQuery({
     queryKey: ["/api/users"],
+    enabled: !!isAdmin, // Only fetch if admin
   });
 
   // Fetch all events (without approvalStatus filter to get ALL events for admin)
@@ -105,7 +76,36 @@ export default function Admin() {
   const approvedEvents = (allEvents || []).filter((event: any) => event.approvalStatus === 'approved');
   const rejectedEvents = (allEvents || []).filter((event: any) => event.approvalStatus === 'rejected');
 
-  // Debug logs (removed to prevent useEffect issues)
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+        <div className="text-center">
+          <Shield className="h-16 w-16 text-blue-400 mx-auto mb-4 animate-pulse" />
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check if user is admin
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+        <div className="text-center">
+          <Shield className="h-16 w-16 text-red-400 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold mb-4">Access Denied</h2>
+          <p className="text-gray-400 mb-2">This page is restricted to administrators only.</p>
+          <p className="text-sm text-yellow-400 mb-6">
+            Your user type: {userProfile?.userType || 'none'}
+          </p>
+          <Button onClick={() => window.location.href = "/"}>
+            Go to Home
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   // Update business claim status
   const updateClaimMutation = useMutation({
