@@ -3,6 +3,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import BottomNavigation from "@/components/BottomNavigation";
 import { useAuth } from "@/hooks/useAuth";
@@ -16,7 +19,8 @@ import {
   Calendar, 
   CheckCircle, 
   XCircle, 
-  Clock
+  Clock,
+  Edit
 } from "lucide-react";
 
 export default function Admin() {
@@ -30,6 +34,8 @@ export default function Admin() {
   const [scrapingSummary, setScrapingSummary] = useState<any>(null);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [updatingPlaces, setUpdatingPlaces] = useState<Set<string>>(new Set());
+  const [editingPlace, setEditingPlace] = useState<{ id: string; name: string; currentUrl?: string } | null>(null);
+  const [manualGoogleMapsUrl, setManualGoogleMapsUrl] = useState('');
 
   // Queries (enabled only if admin to prevent unnecessary calls)
   const { data: allUsers = [] } = useQuery({
@@ -246,6 +252,34 @@ export default function Admin() {
     }
   };
 
+  // Mutation para atualizar googleMapsUri
+  const updateGoogleMapsUriMutation = useMutation({
+    mutationFn: async ({ placeId, googleMapsUri }: { placeId: string; googleMapsUri: string }) => {
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      
+      const response = await fetch(`${API_URL}/places/${placeId}/googlemaps`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ googleMapsUri })
+      });
+      
+      if (!response.ok) throw new Error('Failed to update googleMapsUri');
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Sucesso", description: "URL do Google Maps atualizado com sucesso!" });
+      setEditingPlace(null);
+      setManualGoogleMapsUrl('');
+    },
+    onError: () => {
+      toast({ title: "Erro", description: "Falha ao atualizar URL", variant: "destructive" });
+    },
+  });
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "approved": return "bg-green-600";
@@ -349,7 +383,7 @@ export default function Admin() {
                 <CardHeader className="bg-yellow-600/10">
                   <CardTitle className="text-yellow-400 flex items-center justify-between">
                     <div className="flex items-center">
-                      <Clock className="h-5 w-5 mr-2" />
+                    <Clock className="h-5 w-5 mr-2" />
                       Pending Approval ({pendingEvents.length})
                     </div>
                     <Badge className="bg-yellow-600 text-white">{pendingEvents.length} events pending</Badge>
@@ -478,8 +512,8 @@ export default function Admin() {
                     className="w-full" 
                     size="lg"
                   >
-                    {isScraping ? <><Clock className="h-4 w-4 mr-2 animate-spin" /> Executando...</> : <><MapPin className="h-4 w-4 mr-2" /> Iniciar Scraping</>}
-                  </Button>
+                  {isScraping ? <><Clock className="h-4 w-4 mr-2 animate-spin" /> Executando...</> : <><MapPin className="h-4 w-4 mr-2" /> Iniciar Scraping</>}
+                </Button>
                   <Button 
                     onClick={handleStopScraping}
                     disabled={!isScraping}
@@ -558,31 +592,88 @@ export default function Admin() {
                               <div className="text-xs text-gray-500">
                                 {log.duration}ms
                               </div>
-                              {(log.status === 'error' || log.status === 'skipped' || !log.data) && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => updatePlaceMutation.mutate(log.placeId)}
-                                  disabled={updatingPlaces.has(log.placeId)}
-                                  className="text-xs"
-                                >
-                                  {updatingPlaces.has(log.placeId) ? (
-                                    <>
-                                      <Clock className="h-3 w-3 mr-1 animate-spin" /> Atualizando...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <CheckCircle className="h-3 w-3 mr-1" /> Update
-                                    </>
-                                  )}
-                                </Button>
-                              )}
+                              <div className="flex gap-1">
+                                {!log.googleMapsUri && (
+                                  <Dialog>
+                                    <DialogTrigger asChild>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          setEditingPlace({ id: log.placeId, name: log.placeName });
+                                          setManualGoogleMapsUrl('');
+                                        }}
+                                        className="text-xs"
+                                      >
+                                        <Edit className="h-3 w-3 mr-1" /> URL
+                                      </Button>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                      <DialogHeader>
+                                        <DialogTitle>Adicionar URL do Google Maps</DialogTitle>
+                                      </DialogHeader>
+                                      <div className="space-y-4">
+                                        <div>
+                                          <Label>Nome do Lugar: {log.placeName}</Label>
+                                        </div>
+                                        <div>
+                                          <Label>URL do Google Maps:</Label>
+                                          <Input
+                                            type="url"
+                                            placeholder="https://maps.google.com/..."
+                                            value={manualGoogleMapsUrl}
+                                            onChange={(e) => setManualGoogleMapsUrl(e.target.value)}
+                                          />
+                                        </div>
+                                        <div className="flex gap-2 justify-end">
+                                          <Button 
+                                            variant="outline"
+                                            onClick={() => setEditingPlace(null)}
+                                          >
+                                            Cancelar
+                                          </Button>
+                                          <Button 
+                                            onClick={() => {
+                                              updateGoogleMapsUriMutation.mutate({
+                                                placeId: log.placeId,
+                                                googleMapsUri: manualGoogleMapsUrl
+                                              });
+                                            }}
+                                            disabled={!manualGoogleMapsUrl}
+                                          >
+                                            Salvar
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    </DialogContent>
+                                  </Dialog>
+                                )}
+                                {(log.status === 'error' || log.status === 'skipped' || !log.data) && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => updatePlaceMutation.mutate(log.placeId)}
+                                    disabled={updatingPlaces.has(log.placeId)}
+                                    className="text-xs"
+                                  >
+                                    {updatingPlaces.has(log.placeId) ? (
+                                      <>
+                                        <Clock className="h-3 w-3 mr-1 animate-spin" /> Atualizando...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <CheckCircle className="h-3 w-3 mr-1" /> Update
+                                      </>
+                                    )}
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                           </div>
                           {log.error && (
                             <div className="mt-2 text-xs text-red-400">
                               ❌ {log.error}
-                            </div>
+                    </div>
                           )}
                         </CardContent>
                       </Card>

@@ -118,6 +118,19 @@ app.get('/events', authenticate, async (req: express.Request, res: express.Respo
     
     console.log('[API] Total de eventos no Firestore:', events.length);
     
+    // Log detalhado dos eventos
+    if (events.length > 0) {
+      console.log('[API] Primeiro evento:', JSON.stringify(events[0], null, 2));
+      events.forEach((e: any, idx: number) => {
+        console.log(`[API] Evento ${idx + 1}:`, {
+          id: e.id,
+          title: e.title,
+          approvalStatus: e.approvalStatus,
+          startDateTime: e.startDateTime
+        });
+      });
+    }
+    
     // Aplicar filtros em memória
     if (eventType) {
       events = events.filter((e: any) => e.eventType === eventType);
@@ -892,6 +905,40 @@ app.post('/places/update-all-hours', authenticate, async (req: express.Request, 
   }
 });
 
+// Endpoint para atualizar googleMapsUri de um place
+app.patch('/places/:placeId/googlemaps', authenticate, async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    const { placeId } = req.params;
+    const { googleMapsUri } = req.body;
+    
+    if (!googleMapsUri) {
+      res.status(400).json({ message: "googleMapsUri é obrigatório" });
+      return;
+    }
+    
+    const placeDoc = await db.collection('places').doc(placeId);
+    const placeData = await placeDoc.get();
+    
+    if (!placeData.exists) {
+      res.status(404).json({ message: "Place not found" });
+      return;
+    }
+    
+    await placeDoc.update({
+      googleMapsUri,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    
+    res.json({
+      success: true,
+      message: `googleMapsUri atualizado para ${placeData.data()?.name}`,
+    });
+  } catch (error: any) {
+    console.error('[API] Erro ao atualizar googleMapsUri:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Endpoint para atualizar um place individual
 app.post('/places/:placeId/scrape', authenticate, async (req: express.Request, res: express.Response): Promise<void> => {
   try {
@@ -969,6 +1016,7 @@ app.post('/places/scrape-popular-times', authenticate, async (req: express.Reque
         total: places.length,
         placeName: place.name,
         placeId: place.id,
+        googleMapsUri: place.googleMapsUri || null,
         status: 'processing',
         logs: [],
         data: null,
