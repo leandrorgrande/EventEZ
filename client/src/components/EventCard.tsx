@@ -85,7 +85,7 @@ export default function EventCard({ event, onJoin }: EventCardProps) {
           <div className="flex items-center text-sm text-gray-300">
             <Users className="h-4 w-4 mr-2 text-gray-400" />
             <span data-testid={`text-event-attendees-${event.id}`}>
-              0 going
+              {event.attendeesCount || 0} going
             </span>
           </div>
         </div>

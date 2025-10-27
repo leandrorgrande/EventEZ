@@ -217,8 +217,14 @@ app.get('/events', authenticate, async (req: express.Request, res: express.Respo
       }
     }
     
-    console.log('[API] Eventos retornados:', events.length);
-    res.json(events);
+    // Anexar contagem de participantes
+    const eventsWithCount = events.map((e: any) => ({
+      ...e,
+      attendeesCount: Array.isArray(e.attendeeIds) ? e.attendeeIds.length : 0
+    }));
+
+    console.log('[API] Eventos retornados:', eventsWithCount.length);
+    res.json(eventsWithCount);
   } catch (error) {
     console.error('[API] Erro ao buscar eventos:', error);
     res.status(500).json({ message: "Failed to fetch events" });
@@ -309,7 +315,7 @@ app.post('/events', authenticate, async (req: express.Request, res: express.Resp
 app.patch('/events/:eventId', authenticate, async (req: express.Request, res: express.Response) => {
   try {
     const { eventId } = req.params;
-    const { approvalStatus, ...otherData } = req.body;
+    const { approvalStatus, join, ...otherData } = req.body;
     
     const eventRef = db.collection('events').doc(eventId);
     const eventDoc = await eventRef.get();
@@ -328,6 +334,16 @@ app.patch('/events/:eventId', authenticate, async (req: express.Request, res: ex
       updateData.reviewedBy = (req as any).user.uid;
       updateData.reviewedAt = admin.firestore.FieldValue.serverTimestamp();
     }
+
+    // Participação no evento (join=true adiciona, join=false remove)
+    if (typeof join === 'boolean') {
+      const userId = (req as any).user.uid;
+      if (join) {
+        updateData.attendeeIds = admin.firestore.FieldValue.arrayUnion(userId);
+      } else {
+        updateData.attendeeIds = admin.firestore.FieldValue.arrayRemove(userId);
+      }
+    }
     
     if (otherData && Object.keys(otherData).length > 0) {
       Object.assign(updateData, otherData);
@@ -335,7 +351,9 @@ app.patch('/events/:eventId', authenticate, async (req: express.Request, res: ex
     
     await eventRef.update(updateData);
     
-    const updatedEvent = { id: eventDoc.id, ...eventDoc.data(), ...updateData };
+    const updatedSnap = await eventRef.get();
+    const updatedEvent = { id: updatedSnap.id, ...updatedSnap.data() } as any;
+    (updatedEvent as any).attendeesCount = Array.isArray(updatedEvent.attendeeIds) ? updatedEvent.attendeeIds.length : 0;
     
     res.json(updatedEvent);
   } catch (error) {

@@ -380,6 +380,7 @@ export default function MapaCalor() {
               <h3 style="margin: 0 0 8px 0; color: #1f2937; font-size: 16px;">🎫 ${ev.title || 'Evento'}</h3>
               ${ev.startDateTime ? `<p style="margin:0; color:#6b7280; font-size:13px;">Início: ${new Date(ev.startDateTime).toLocaleString('pt-BR')}</p>` : ''}
               ${ev.endDateTime ? `<p style="margin:0; color:#6b7280; font-size:13px;">Fim: ${new Date(ev.endDateTime).toLocaleString('pt-BR')}</p>` : ''}
+              <p style="margin:6px 0 0 0; color:#1f2937; font-size:13px;"><strong>${(ev as any).attendeesCount || 0} pessoas vão</strong></p>
               <div style="margin-top:10px; display:flex; align-items:center; gap:8px;">
                 <div style="width:10px; height:10px; border-radius:50%; background:#3B82F6;"></div>
                 <span style="font-size:12px; color:#1f2937;">Evento</span>
