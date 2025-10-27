@@ -141,7 +141,9 @@ app.get('/events/debug', authenticate, async (req: express.Request, res: express
 app.get('/events', authenticate, async (req: express.Request, res: express.Response) => {
   try {
     const eventType = req.query.eventType as string;
-    const isActive = req.query.isActive === 'true';
+    // Corrigir: só considerar isActive quando o parâmetro existir na query
+    const hasIsActiveParam = typeof req.query.isActive !== 'undefined';
+    const isActive = hasIsActiveParam ? (req.query.isActive === 'true') : undefined;
     const approvalStatus = req.query.approvalStatus as string;
     const user = (req as any).user;
     
@@ -172,7 +174,7 @@ app.get('/events', authenticate, async (req: express.Request, res: express.Respo
       events = events.filter((e: any) => e.eventType === eventType);
     }
     
-    if (isActive !== undefined) {
+    if (hasIsActiveParam) {
       events = events.filter((e: any) => e.isActive === isActive);
     }
     
