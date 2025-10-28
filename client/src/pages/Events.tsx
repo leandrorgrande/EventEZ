@@ -41,7 +41,7 @@ export default function Events() {
   ) || [];
 
   const joinMutation = useMutation({
-    mutationFn: async (eventId: string) => {
+    mutationFn: async ({ eventId, willJoin }: { eventId: string; willJoin: boolean }) => {
       const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
       const token = (await import('@/lib/firebase')).auth.currentUser ? await (await import('@/lib/firebase')).auth.currentUser?.getIdToken() : undefined;
       const res = await fetch(`${API_URL}/events/${eventId}`, {
@@ -50,12 +50,12 @@ export default function Events() {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ join: true })
+        body: JSON.stringify({ join: willJoin })
       });
       if (!res.ok) throw new Error('Falha ao participar do evento');
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, params) => {
       // Recarregar lista
       queryClient.invalidateQueries({ queryKey: ["firestore/events", { eventType: filterType }] });
       // Feedback
@@ -63,7 +63,7 @@ export default function Events() {
       import('@/hooks/use-toast').then(({ useToast }) => {
         try {
           const { toast } = useToast();
-          toast({ title: 'Legal! 🎉', description: 'Você vai participar deste evento.' });
+          toast({ title: params.willJoin ? 'Legal! 🎉' : 'Tudo certo 👍', description: params.willJoin ? 'Você vai participar deste evento.' : 'Você saiu do evento.' });
         } catch {}
       });
     }
@@ -155,9 +155,19 @@ export default function Events() {
           </Card>
         ) : (
           <div className="space-y-4">
-            {filteredEvents.map((event: any) => (
-              <EventCard key={event.id} event={event} onJoin={(id) => joinMutation.mutate(id)} />
-            ))}
+            {filteredEvents.map((event: any) => {
+              const currentUser = (window as any).firebase?.auth?.currentUser || undefined;
+              const uid = currentUser?.uid;
+              const isGoing = Array.isArray(event.attendeeIds) ? event.attendeeIds.includes(uid) : false;
+              return (
+                <EventCard 
+                  key={event.id} 
+                  event={event} 
+                  isGoing={isGoing}
+                  onToggleJoin={(id, willJoin) => joinMutation.mutate({ eventId: id, willJoin })}
+                />
+              );
+            })}
           </div>
         )}
       </div>

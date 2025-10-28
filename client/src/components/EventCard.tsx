@@ -5,10 +5,11 @@ import { Calendar, MapPin, Users, Clock } from "lucide-react";
 
 interface EventCardProps {
   event: any;
-  onJoin?: (eventId: string) => void;
+  isGoing?: boolean;
+  onToggleJoin?: (eventId: string, willJoin: boolean) => void;
 }
 
-export default function EventCard({ event, onJoin }: EventCardProps) {
+export default function EventCard({ event, isGoing, onToggleJoin }: EventCardProps) {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("en-US", {
@@ -92,11 +93,11 @@ export default function EventCard({ event, onJoin }: EventCardProps) {
 
         <div className="flex space-x-2">
           <Button
-            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-            onClick={() => onJoin?.(event.id)}
+            className={`${isGoing ? 'flex-1 bg-green-600 hover:bg-green-700' : 'flex-1 bg-blue-600 hover:bg-blue-700'} text-white`}
+            onClick={() => onToggleJoin?.(event.id, !isGoing)}
             data-testid={`button-join-event-${event.id}`}
           >
-            Join Event
+            {isGoing ? 'Joined' : 'Join Event'}
           </Button>
           <Button
             variant="secondary"
