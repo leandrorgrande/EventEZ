@@ -429,8 +429,8 @@ export default function MapaCalor() {
         heatmapData.push({ location, weight });
       }
 
-      // Adicionar marcador: se fechado (dia todo) ou se popularidade > 40%
-      if ((place as any).openingHours?.[dayKey]?.closed === true || popularity >= 40) {
+      // Adicionar marcador: se fechado (dia todo) ou se há qualquer movimento (inclui Tranquilo)
+      if ((place as any).openingHours?.[dayKey]?.closed === true || popularity > 0) {
         const marker = new google.maps.Marker({
           position: location,
           map,
@@ -658,9 +658,10 @@ export default function MapaCalor() {
         
         const placesHtml = nearbyPlaces
           .map(p => {
-            const pop = (p as any).popularTimes?.[dayKey]?.[selectedHour] || 50;
-            const statusLabel = pop === 0 ? '🔒 Fechado' : `Movimento ${getPopularityLabel(pop)}`;
-            const statusColor = pop === 0 ? '#000000' : getColorByPopularity(pop);
+            const pop = (p as any).popularTimes?.[dayKey]?.[selectedHour] ?? 0;
+            const closedAllDay = (p as any).openingHours?.[dayKey]?.closed === true;
+            const statusLabel = closedAllDay ? '🔒 Fechado' : `Movimento ${getPopularityLabel(pop)}`;
+            const statusColor = closedAllDay ? '#000000' : getColorByPopularity(pop);
             return `
               <div style="padding: 8px; border-bottom: 1px solid #e5e7eb;">
                 <strong style="color: #1f2937;">${p.name}</strong>
@@ -1260,7 +1261,7 @@ export default function MapaCalor() {
                         
                         {/* Status de movimentação (sem %) */}
                         <div className="flex items-center gap-1 mt-1">
-                          {popularity === 0 ? (
+                          {isClosedAllDay ? (
                             <span className="text-xs md:text-sm font-bold text-red-400">
                               🔒 Fechado
                             </span>

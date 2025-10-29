@@ -1027,10 +1027,17 @@ export default function Admin() {
                     <div className="text-sm text-gray-300 mb-2">
                       Total: {serpResults.total} | Atualizados: {serpResults.updated} | Falhas: {serpResults.failed}
                     </div>
+                    {Array.isArray(serpResults.logs) && serpResults.logs.length > 0 && (
+                      <div className="mb-2 max-h-40 overflow-auto bg-slate-900 border border-slate-700 rounded p-2 text-xs text-gray-300">
+                        {serpResults.logs.map((l: string, i: number) => (
+                          <div key={i}>• {l}</div>
+                        ))}
+                      </div>
+                    )}
                     <div className="max-h-64 overflow-auto bg-slate-900 border border-slate-700 rounded p-2 text-xs">
                       {Array.isArray(serpResults.results) && serpResults.results.map((r: any, i: number) => (
                         <div key={i} className={`py-1 ${r.ok ? 'text-green-400' : 'text-red-400'}`}>
-                          {r.id}: {r.ok ? 'ok' : 'falha'}{r.error ? ` - ${r.error}` : ''}
+                          {r.id} {r.name ? `(${r.name})` : ''}: {r.ok ? 'ok' : 'falha'}{r.source ? ` • ${r.source}` : ''}{r.error ? ` - ${r.error}` : ''}
                         </div>
                       ))}
                     </div>

@@ -986,7 +986,71 @@ const normalizePopularTimes = (raw: any): any | null => {
   return null;
 };
 
-const fetchPopularTimesFromSerpApi = async (name: string, address?: string): Promise<any | null> => {
+const normalizeOpeningHoursFromSerpApi = (detail: any): any | null => {
+  try {
+    const weekday = detail?.opening_hours?.weekday_text;
+    if (!weekday || !Array.isArray(weekday)) return null;
+    const result: any = {
+      monday: null,
+      tuesday: null,
+      wednesday: null,
+      thursday: null,
+      friday: null,
+      saturday: null,
+      sunday: null,
+    };
+    const mapDay = (d: string): string | null => {
+      const s = d.toLowerCase();
+      if (s.startsWith('mon')) return 'monday';
+      if (s.startsWith('tue')) return 'tuesday';
+      if (s.startsWith('wed')) return 'wednesday';
+      if (s.startsWith('thu')) return 'thursday';
+      if (s.startsWith('fri')) return 'friday';
+      if (s.startsWith('sat')) return 'saturday';
+      if (s.startsWith('sun')) return 'sunday';
+      if (s.startsWith('seg')) return 'monday';
+      if (s.startsWith('ter')) return 'tuesday';
+      if (s.startsWith('qua')) return 'wednesday';
+      if (s.startsWith('qui')) return 'thursday';
+      if (s.startsWith('sex')) return 'friday';
+      if (s.startsWith('sáb') || s.startsWith('sab')) return 'saturday';
+      if (s.startsWith('dom')) return 'sunday';
+      return null;
+    };
+    const to24 = (txt: string): string | null => {
+      if (!txt) return null;
+      const m = txt.trim().match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
+      if (!m) return null;
+      let h = parseInt(m[1], 10);
+      const min = m[2] ? parseInt(m[2], 10) : 0;
+      const ap = (m[3] || '').toUpperCase();
+      if (ap === 'PM' && h !== 12) h += 12;
+      if (ap === 'AM' && h === 12) h = 0;
+      return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+    };
+    for (const line of weekday) {
+      const parts = String(line).split(':');
+      const dayKey = mapDay(parts[0] || '');
+      if (!dayKey) continue;
+      const hoursText = parts.slice(1).join(':').trim();
+      if (!hoursText || /fechad|closed/i.test(hoursText)) {
+        result[dayKey] = { open: null, close: null, closed: true };
+        continue;
+      }
+      const rng = hoursText.match(/([\d: ]+(?:AM|PM)?)\s*[–-]\s*([\d: ]+(?:AM|PM)?)/i);
+      if (rng) {
+        const open = to24(rng[1]);
+        const close = to24(rng[2]);
+        result[dayKey] = { open, close, closed: false };
+      }
+    }
+    return result;
+  } catch {
+    return null;
+  }
+};
+
+const fetchPopularTimesFromSerpApi = async (name: string, address?: string): Promise<{ popularTimes: any | null; openingHours: any | null; isOpen: boolean | null } | null> => {
   try {
     const axios = require('axios');
     const apiKey = process.env.SERPAPI_API_KEY;
@@ -998,7 +1062,7 @@ const fetchPopularTimesFromSerpApi = async (name: string, address?: string): Pro
     const first = searchRes?.data?.local_results?.[0];
     if (!first) {
       const normalized = normalizePopularTimes(searchRes?.data?.popular_times);
-      if (normalized) return normalized;
+      if (normalized) return { popularTimes: normalized, openingHours: null, isOpen: null };
       return null;
     }
     const dataId = first?.data_id;
@@ -1010,7 +1074,9 @@ const fetchPopularTimesFromSerpApi = async (name: string, address?: string): Pro
       detail = detailRes?.data;
     }
     const normalized = normalizePopularTimes(detail?.popular_times || first?.popular_times || detail);
-    return normalized;
+    const openingHours = normalizeOpeningHoursFromSerpApi(detail);
+    const isOpen = typeof detail?.opening_hours?.open_now === 'boolean' ? !!detail?.opening_hours?.open_now : null;
+    return { popularTimes: normalized, openingHours, isOpen };
   } catch (e: any) {
     console.error('[Import] SerpApi error:', e?.response?.data || e?.message || e);
     return null;
@@ -1025,7 +1091,9 @@ app.post('/places/popular-times/import-once', authenticate, async (req: express.
     const areaIncludes: string | undefined = body.areaIncludes;
     const nameIncludes: string | undefined = body.nameIncludes;
     const overrideApiKey: string | undefined = body.apiKey; // opcional para testes
-    console.log('[Import] Iniciando import popularTimes (one-time)', { limit, typeFilter, areaIncludes, nameIncludes });
+    const logMessages: string[] = [];
+    const log = (m: string) => { console.log('[Import]', m); logMessages.push(m); };
+    log(`Iniciando import popularTimes (one-time) limit=${limit} type=${typeFilter || '-'} area=${areaIncludes || '-'} name=${nameIncludes || '-'}`);
 
     const snap = await db.collection('places').get();
     let places = snap.docs.map(d => ({ docRef: d.ref, id: d.id, ...(d.data() as any) }));
@@ -1045,24 +1113,41 @@ app.post('/places/popular-times/import-once', authenticate, async (req: express.
     }
     // Apenas os que ainda não possuem popularTimes
     places = places.filter(p => !p.popularTimes).slice(0, limit);
+    log(`Selecionados ${places.length} lugares após filtros (sem popularTimes).`);
 
     let updated = 0; let failed = 0; const results: any[] = [];
 
     for (const place of places) {
       try {
+        log(`Processando: ${place.name || place.displayName?.text || place.id}`);
         let popularTimes: any | null = null;
+        let openingHours: any | null = null;
+        let isOpen: boolean | null = null;
         // Permitir override de API key somente nesta chamada, sem persistir
         if (overrideApiKey) {
           (process as any).env.SERPAPI_API_KEY = overrideApiKey;
         }
-        popularTimes = await fetchPopularTimesFromSerpApi(place.name || place.displayName?.text || '', place.formattedAddress);
+        const fromSerp = await fetchPopularTimesFromSerpApi(place.name || place.displayName?.text || '', place.formattedAddress);
+        if (fromSerp) {
+          popularTimes = fromSerp.popularTimes;
+          openingHours = fromSerp.openingHours;
+          isOpen = fromSerp.isOpen;
+          log(`SerpApi retornou popularTimes=${!!popularTimes}, openingHours=${!!openingHours}, isOpen=${isOpen}`);
+        }
         if (!popularTimes && place.googleMapsUri) {
           popularTimes = await scrapePopularTimes(place.name || place.displayName?.text || '', place.googleMapsUri);
+          log(`Fallback scraping: popularTimes=${!!popularTimes}`);
         }
         if (popularTimes) {
-          await place.docRef.update({ popularTimes, dataSource: popularTimes ? 'serpapi' : 'scraped', updatedAt: admin.firestore.FieldValue.serverTimestamp() });
-          updated++; results.push({ id: place.id, ok: true });
-        } else { failed++; results.push({ id: place.id, ok: false }); }
+          await place.docRef.update({
+            popularTimes,
+            ...(openingHours ? { openingHours } : {}),
+            ...(isOpen !== null ? { isOpen } : {}),
+            dataSource: fromSerp ? 'serpapi' : 'scraped',
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+          updated++; results.push({ id: place.id, name: place.name || place.displayName?.text || '', ok: true, source: fromSerp ? 'serpapi' : 'scraped' });
+        } else { failed++; results.push({ id: place.id, name: place.name || place.displayName?.text || '', ok: false }); }
 
         // Respeitar limites - aguardar 1.2s entre chamadas
         await new Promise(resolve => setTimeout(resolve, 1200));
@@ -1072,7 +1157,7 @@ app.post('/places/popular-times/import-once', authenticate, async (req: express.
       }
     }
 
-    res.json({ total: places.length, updated, failed, provider: 'serpapi', results });
+    res.json({ total: places.length, updated, failed, provider: 'serpapi', results, logs: logMessages });
   } catch (error: any) {
     console.error('[Import] erro geral:', error);
     res.status(500).json({ message: 'Failed to import popular times', error: error?.message });
