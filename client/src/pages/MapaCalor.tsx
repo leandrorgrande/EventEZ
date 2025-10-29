@@ -75,6 +75,7 @@ export default function MapaCalor() {
   const [markers, setMarkers] = useState<any[]>([]);
   const [eventMarkers, setEventMarkers] = useState<any[]>([]);
   const [customOverlays, setCustomOverlays] = useState<any[]>([]);
+  const markersMap = useRef<Map<string, { marker: any; infoWindow: any }>>(new Map()); // Mapa de placeId -> marker/infoWindow
   const mapRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -99,7 +100,7 @@ export default function MapaCalor() {
   const [selectedType, setSelectedType] = useState<string>('all'); // Filtro de tipo
   const [statusFilter, setStatusFilter] = useState<'all' | 'openOnly'>('all'); // Filtro de status
   const [minRating, setMinRating] = useState<number>(0); // Filtro de avaliação mínima
-  const [filtersExpanded, setFiltersExpanded] = useState<boolean>(true); // Controle de expansão dos filtros
+  const [filtersExpanded, setFiltersExpanded] = useState<boolean>(false); // Controle de expansão dos filtros - padrão fechado
 
   // Calcular dia da semana a partir da data selecionada
   const selectedDay = getWeekdayFromDate(selectedDate);
@@ -237,6 +238,80 @@ export default function MapaCalor() {
     }
   }, [places]);
 
+  // Funções auxiliares - definidas antes dos useEffects
+  const getDayLabel = (day: string): string => {
+    const labels: Record<string, string> = {
+      monday: 'Segunda-feira',
+      tuesday: 'Terça-feira',
+      wednesday: 'Quarta-feira',
+      thursday: 'Quinta-feira',
+      friday: 'Sexta-feira',
+      saturday: 'Sábado',
+      sunday: 'Domingo'
+    };
+    return labels[day] || day;
+  };
+
+  // Converter horário de 12h para 24h (formato brasileiro)
+  const convertTo24h = (time12h: string): string => {
+    if (!time12h) return '';
+    // Remove espaços e converte
+    const time = time12h.trim();
+    const match = time.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (!match) return time; // Se não estiver no formato esperado, retorna original
+    
+    let hours = parseInt(match[1]);
+    const minutes = match[2];
+    const ampm = match[3].toUpperCase();
+    
+    if (ampm === 'PM' && hours !== 12) hours += 12;
+    if (ampm === 'AM' && hours === 12) hours = 0;
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes}`;
+  };
+
+  // Calcular próximo horário de abertura se estiver fechado
+  const getNextOpeningTime = (place: Place, currentDay: string, currentHour: number): string | null => {
+    if (!place.openingHours || !place.openingHours[currentDay]) return null;
+    
+    const dayHours = place.openingHours[currentDay];
+    if (!dayHours.closed && dayHours.open) {
+      const openTime = convertTo24h(dayHours.open);
+      const openHour = parseInt(openTime.split(':')[0]);
+      
+      // Se ainda vai abrir hoje
+      if (openHour > currentHour) {
+        return openTime;
+      }
+    }
+    
+    // Se já passou, verifica próximo dia
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const currentDayIndex = days.indexOf(currentDay);
+    
+    for (let i = 1; i <= 7; i++) {
+      const nextDayIndex = (currentDayIndex + i) % 7;
+      const nextDay = days[nextDayIndex];
+      const nextDayHours = place.openingHours[nextDay];
+      
+      if (nextDayHours && !nextDayHours.closed && nextDayHours.open) {
+        const openTime = convertTo24h(nextDayHours.open);
+        const dayLabel = getDayLabel(nextDay);
+        return `${dayLabel} às ${openTime}`;
+      }
+    }
+    
+    return null;
+  };
+
+  // Função para abrir InfoWindow ao clicar na lista
+  const openInfoWindowForPlace = (place: Place) => {
+    const markerData = markersMap.current.get(place.id);
+    if (markerData && markerData.infoWindow && map) {
+      markerData.infoWindow.open(map, markerData.marker);
+    }
+  };
+
   // Inicializar Google Maps
   useEffect(() => {
     if (!mapRef.current) return;
@@ -297,6 +372,7 @@ export default function MapaCalor() {
     markers.forEach(marker => marker.setMap(null));
     eventMarkers.forEach(marker => marker.setMap(null));
     customOverlays.forEach(overlay => overlay.setMap && overlay.setMap(null));
+    markersMap.current.clear(); // Limpar mapa de referências
 
     // Gerar dados do heatmap
     const heatmapData: any[] = [];
@@ -354,6 +430,15 @@ export default function MapaCalor() {
         const statusLabel = isClosed ? '🔒 Fechado' : `Movimento ${getPopularityLabel(popularity)}`;
         const bgColor = isClosed ? '#000000' : getColorByPopularity(popularity);
         
+        // Calcular próximo horário de abertura se estiver fechado
+        let nextOpeningInfo = '';
+        if (isClosed) {
+          const nextOpening = getNextOpeningTime(place, selectedDay, selectedHour);
+          if (nextOpening) {
+            nextOpeningInfo = `<p style="margin: 8px 0 0 0; color: #10b981; font-size: 12px; font-weight: 600;">🕐 Abre: ${nextOpening}</p>`;
+          }
+        }
+        
         const infoWindow = new google.maps.InfoWindow({
           content: `
             <div style="padding: 12px; font-family: Arial, sans-serif; min-width: 200px;">
@@ -363,8 +448,9 @@ export default function MapaCalor() {
               </div>
               <p style="margin: 0; color: #6b7280; font-size: 13px;">
                 📅 ${getDayLabel(selectedDay)}<br/>
-                🕐 ${selectedHour}:00
+                🕐 ${selectedHour.toString().padStart(2, '0')}:00
               </p>
+              ${nextOpeningInfo}
               ${place.formattedAddress ? `
                 <p style="margin: 8px 0 0 0; color: #9ca3af; font-size: 12px;">
                   📍 ${place.formattedAddress}
@@ -383,6 +469,9 @@ export default function MapaCalor() {
         marker.addListener('click', () => {
           infoWindow.open(map, marker);
         });
+
+        // Armazenar marker e infoWindow para poder abrir ao clicar na lista
+        markersMap.current.set(place.id, { marker, infoWindow });
 
         newMarkers.push(marker);
       }
@@ -597,22 +686,10 @@ export default function MapaCalor() {
     return 'Tranquilo';
   };
 
-  const getDayLabel = (day: string): string => {
-    const labels: Record<string, string> = {
-      monday: 'Segunda-feira',
-      tuesday: 'Terça-feira',
-      wednesday: 'Quarta-feira',
-      thursday: 'Quinta-feira',
-      friday: 'Sexta-feira',
-      saturday: 'Sábado',
-      sunday: 'Domingo'
-    };
-    return labels[day] || day;
-  };
-
   const getHourLabel = (hour: number): string => {
     return `${hour.toString().padStart(2, '0')}:00`;
   };
+
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-900 overflow-hidden">
@@ -1003,16 +1080,8 @@ export default function MapaCalor() {
                       // Dar zoom
                       map.setZoom(16);
                       
-                      // Feedback visual
-                      // Mensagem do toast
-                      const statusMessage = popularity === 0 
-                        ? 'Fechado'
-                        : `${getPopularityLabel(popularity)} - ${popularity}%`;
-                      
-                      toast({
-                        title: "📍 " + place.name,
-                        description: statusMessage,
-                      });
+                      // Abrir InfoWindow automaticamente
+                      openInfoWindowForPlace(place);
                     }
                   }}
                 >
@@ -1056,13 +1125,26 @@ export default function MapaCalor() {
                           
                           const dayHours = place.openingHours[dayKey];
                           
+                          // Converter horários para 24h
+                          const openTime24h = convertTo24h(dayHours.open || '');
+                          const closeTime24h = convertTo24h(dayHours.close || '');
+                          
+                          // Calcular próximo horário de abertura se estiver fechado
+                          let nextOpeningText = '';
+                          if (isClosed) {
+                            const nextOpening = getNextOpeningTime(place, dayKey, selectedHour);
+                            if (nextOpening) {
+                              nextOpeningText = ` (Abre: ${nextOpening})`;
+                            }
+                          }
+                          
                           return (
                             <p className="text-[10px] md:text-xs mt-1">
                               {dayHours.closed ? (
-                                <span className="text-red-400">🔒 Fechado o dia todo</span>
+                                <span className="text-red-400">🔒 Fechado o dia todo{nextOpeningText && <span className="text-green-400">{nextOpeningText}</span>}</span>
                               ) : (
                                 <span className="text-green-400">
-                                  🕐 {dayHours.open} - {dayHours.close}
+                                  🕐 {openTime24h} - {closeTime24h}
                                 </span>
                               )}
                             </p>
