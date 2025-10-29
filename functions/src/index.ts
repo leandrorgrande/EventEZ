@@ -1050,30 +1050,54 @@ const normalizeOpeningHoursFromSerpApi = (detail: any): any | null => {
   }
 };
 
-const fetchPopularTimesFromSerpApi = async (name: string, address?: string): Promise<{ popularTimes: any | null; openingHours: any | null; isOpen: boolean | null } | null> => {
+const fetchPopularTimesFromSerpApi = async (
+  name: string,
+  address?: string,
+  placeIdRaw?: string | null,
+  lat?: number | null,
+  lng?: number | null,
+): Promise<{ popularTimes: any | null; openingHours: any | null; isOpen: boolean | null } | null> => {
   try {
     const axios = require('axios');
     const apiKey = process.env.SERPAPI_API_KEY;
     if (!apiKey) return null;
-    const q = address ? `${name} ${address}` : name;
-    const searchUrl = 'https://serpapi.com/search.json';
-    const searchParams = { engine: 'google_maps', q, hl: 'pt-BR', gl: 'br', type: 'search', api_key: apiKey } as any;
-    const searchRes = await axios.get(searchUrl, { params: searchParams, timeout: 20000 });
-    const first = searchRes?.data?.local_results?.[0];
-    if (!first) {
-      const normalized = normalizePopularTimes(searchRes?.data?.popular_times);
-      if (normalized) return { popularTimes: normalized, openingHours: null, isOpen: null };
-      return null;
-    }
-    const dataId = first?.data_id;
+    // 1) Preferir chamada direta ao google_maps_place com place_id (quando tivermos do Places API v1: "places/{place_id}")
     let detail = null;
-    if (dataId) {
+    let firstLocal: any = null;
+    const placeId = (placeIdRaw || '').startsWith('places/') ? (placeIdRaw as string).slice(7) : (placeIdRaw || '');
+    if (placeId) {
       const detailUrl = 'https://serpapi.com/search.json';
-      const detailParams = { engine: 'google_maps_place', data_id: dataId, hl: 'pt-BR', gl: 'br', api_key: apiKey } as any;
+      const detailParams = { engine: 'google_maps_place', place_id: placeId, hl: 'pt-BR', gl: 'br', api_key: apiKey } as any;
       const detailRes = await axios.get(detailUrl, { params: detailParams, timeout: 20000 });
       detail = detailRes?.data;
     }
-    const normalized = normalizePopularTimes(detail?.popular_times || first?.popular_times || detail);
+
+    // 2) Fallback: buscar pelo nome/endereço com google_maps search e, se vier data_id, pedir o place
+    if (!detail) {
+      const q = address ? `${name} ${address}` : name;
+      const searchUrl = 'https://serpapi.com/search.json';
+      const searchParams: any = { engine: 'google_maps', q, hl: 'pt-BR', gl: 'br', type: 'search', api_key: apiKey };
+      // Se tivermos coordenadas, ajudar a contextualizar a busca
+      if (typeof lat === 'number' && typeof lng === 'number') {
+        // formato aceito: ll: @lat,lng,14z
+        searchParams.ll = `@${lat},${lng},14z`;
+      }
+      const searchRes = await axios.get(searchUrl, { params: searchParams, timeout: 20000 });
+      firstLocal = searchRes?.data?.local_results?.[0];
+      if (!firstLocal) {
+        const normalized = normalizePopularTimes(searchRes?.data?.popular_times);
+        if (normalized) return { popularTimes: normalized, openingHours: null, isOpen: null };
+        return null;
+      }
+      const dataId = firstLocal?.data_id;
+      if (dataId) {
+        const detailUrl = 'https://serpapi.com/search.json';
+        const detailParams = { engine: 'google_maps_place', data_id: dataId, hl: 'pt-BR', gl: 'br', api_key: apiKey } as any;
+        const detailRes = await axios.get(detailUrl, { params: detailParams, timeout: 20000 });
+        detail = detailRes?.data;
+      }
+    }
+    const normalized = normalizePopularTimes(detail?.popular_times || firstLocal?.popular_times || detail);
     const openingHours = normalizeOpeningHoursFromSerpApi(detail);
     const isOpen = typeof detail?.opening_hours?.open_now === 'boolean' ? !!detail?.opening_hours?.open_now : null;
     return { popularTimes: normalized, openingHours, isOpen };
@@ -1127,7 +1151,15 @@ app.post('/places/popular-times/import-once', authenticate, async (req: express.
         if (overrideApiKey) {
           (process as any).env.SERPAPI_API_KEY = overrideApiKey;
         }
-        const fromSerp = await fetchPopularTimesFromSerpApi(place.name || place.displayName?.text || '', place.formattedAddress);
+        const latNum = typeof place.latitude === 'string' ? parseFloat(place.latitude) : (typeof place.latitude === 'number' ? place.latitude : null);
+        const lngNum = typeof place.longitude === 'string' ? parseFloat(place.longitude) : (typeof place.longitude === 'number' ? place.longitude : null);
+        const fromSerp = await fetchPopularTimesFromSerpApi(
+          place.name || place.displayName?.text || '',
+          place.formattedAddress,
+          place.placeId || null,
+          latNum,
+          lngNum,
+        );
         if (fromSerp) {
           popularTimes = fromSerp.popularTimes;
           openingHours = fromSerp.openingHours;
