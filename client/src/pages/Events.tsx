@@ -64,50 +64,112 @@ export default function Events() {
       return json;
     },
     onMutate: async ({ eventId, willJoin }) => {
-      console.log('[Events] onMutate (optimistic)', { eventId, willJoin });
+      console.log('[Events] ====== onMutate START (optimistic update) ======');
+      console.log('[Events] onMutate params:', { eventId, willJoin });
       await queryClient.cancelQueries({ queryKey: ["firestore/events", { eventType: filterType }] });
       const prev = queryClient.getQueryData<any[]>(["firestore/events", { eventType: filterType }]);
+      console.log('[Events] Previous cache data:', prev?.map(e => ({ id: e.id, attendeeIds: e.attendeeIds, attendeesCount: e.attendeesCount })));
+      
       if (prev) {
         const uid = auth.currentUser?.uid;
+        console.log('[Events] Current user UID:', uid);
         const next = prev.map((e: any) => {
           if (e.id !== eventId) return e;
+          console.log('[Events] Found event to update:', { id: e.id, currentAttendeeIds: e.attendeeIds, currentAttendeesCount: e.attendeesCount });
+          
           const attendeeIds = Array.isArray(e.attendeeIds) ? [...e.attendeeIds] : [];
+          console.log('[Events] AttendeeIds array (copy):', attendeeIds);
+          
           const exists = uid ? attendeeIds.includes(uid) : false;
-          if (willJoin && uid && !exists) attendeeIds.push(uid);
-          if (!willJoin && uid && exists) attendeeIds.splice(attendeeIds.indexOf(uid), 1);
-          return {
+          console.log('[Events] User exists in array?', exists);
+          
+          if (willJoin && uid && !exists) {
+            attendeeIds.push(uid);
+            console.log('[Events] Added user to array:', attendeeIds);
+          }
+          if (!willJoin && uid && exists) {
+            const index = attendeeIds.indexOf(uid);
+            attendeeIds.splice(index, 1);
+            console.log('[Events] Removed user from array:', attendeeIds);
+          }
+          
+          const newCount = attendeeIds.length;
+          console.log('[Events] New attendeesCount:', newCount);
+          
+          const updated = {
             ...e,
             attendeeIds,
-            attendeesCount: attendeeIds.length,
+            attendeesCount: newCount,
           };
+          console.log('[Events] Updated event data:', { id: updated.id, attendeeIds: updated.attendeeIds, attendeesCount: updated.attendeesCount });
+          return updated;
         });
+        
+        console.log('[Events] New cache data:', next?.map(e => ({ id: e.id, attendeeIds: e.attendeeIds, attendeesCount: e.attendeesCount })));
         queryClient.setQueryData(["firestore/events", { eventType: filterType }], next);
+        console.log('[Events] ====== onMutate END (cache updated) ======');
+      } else {
+        console.log('[Events] No previous data found');
       }
       return { prev };
     },
     onSuccess: (data, params) => {
-      console.log('[Events] onSuccess - updating cache with API response', data);
+      console.log('[Events] ====== onSuccess START (API response received) ======');
+      console.log('[Events] API response data:', data);
+      console.log('[Events] Response attendeeIds:', data?.attendeeIds);
+      console.log('[Events] Response attendeesCount:', data?.attendeesCount);
+      
       // Atualizar cache com dados da resposta da API (que já tem attendeeIds atualizado)
       const currentData = queryClient.getQueryData<any[]>(["firestore/events", { eventType: filterType }]);
+      console.log('[Events] Current cache before update:', currentData?.map(e => ({ id: e.id, attendeeIds: e.attendeeIds, attendeesCount: e.attendeesCount })));
+      
       if (currentData && data?.id) {
         const updated = currentData.map((e: any) => {
           if (e.id === data.id) {
+            console.log('[Events] Updating event from API response:', {
+              eventId: e.id,
+              oldAttendeeIds: e.attendeeIds,
+              oldAttendeesCount: e.attendeesCount,
+              newAttendeeIds: data.attendeeIds,
+              newAttendeesCount: data.attendeesCount
+            });
+            
             // Usar dados da API que já tem attendeeIds e attendeesCount atualizados
+            const finalAttendeeIds = data.attendeeIds || e.attendeeIds;
+            const finalAttendeesCount = data.attendeesCount !== undefined 
+              ? data.attendeesCount 
+              : (Array.isArray(data.attendeeIds) ? data.attendeeIds.length : (e.attendeesCount || 0));
+            
+            console.log('[Events] Final values:', { 
+              attendeeIds: finalAttendeeIds, 
+              attendeesCount: finalAttendeesCount 
+            });
+            
             return {
               ...e,
-              attendeeIds: data.attendeeIds || e.attendeeIds,
-              attendeesCount: data.attendeesCount !== undefined ? data.attendeesCount : (Array.isArray(data.attendeeIds) ? data.attendeeIds.length : (e.attendeesCount || 0))
+              attendeeIds: finalAttendeeIds,
+              attendeesCount: finalAttendeesCount
             };
           }
           return e;
         });
+        
         queryClient.setQueryData(["firestore/events", { eventType: filterType }], updated);
-        console.log('[Events] Cache updated with API response', updated.find((e: any) => e.id === data.id));
+        const updatedEvent = updated.find((e: any) => e.id === data.id);
+        console.log('[Events] Cache updated with API response:', updatedEvent);
+        console.log('[Events] New cache data:', updated?.map(e => ({ id: e.id, attendeeIds: e.attendeeIds, attendeesCount: e.attendeesCount })));
+      } else {
+        console.log('[Events] Could not update cache - missing data.id or currentData');
       }
+      
       // Invalidate após um delay para garantir que o Firestore tenha sido atualizado
+      console.log('[Events] Scheduling invalidation in 1000ms...');
       setTimeout(() => {
+        console.log('[Events] ====== Invalidating queries ======');
         queryClient.invalidateQueries({ queryKey: ["firestore/events", { eventType: filterType }] });
+        console.log('[Events] ====== Queries invalidated - this will trigger a refetch ======');
       }, 1000);
+      
       // Feedback
       import('@/hooks/use-toast').then(({ useToast }) => {
         try {
@@ -115,6 +177,7 @@ export default function Events() {
           toast({ title: params.willJoin ? 'Legal! 🎉' : 'Tudo certo 👍', description: params.willJoin ? 'Você vai participar deste evento.' : 'Você saiu do evento.' });
         } catch {}
       });
+      console.log('[Events] ====== onSuccess END ======');
     },
     onError: (error, _vars, context) => {
       console.error('[Events] Join mutate error', error);
@@ -213,13 +276,21 @@ export default function Events() {
             {filteredEvents.map((event: any) => {
               const uid = auth.currentUser?.uid;
               const isGoing = Array.isArray(event.attendeeIds) ? event.attendeeIds.includes(uid) : false;
+              console.log('[Events] Rendering event:', { 
+                id: event.id, 
+                title: event.title,
+                attendeeIds: event.attendeeIds, 
+                attendeesCount: event.attendeesCount,
+                uid,
+                isGoing 
+              });
               return (
                 <EventCard 
                   key={event.id} 
                   event={event} 
                   isGoing={isGoing}
                   onToggleJoin={(id, willJoin) => {
-                    console.log('[Events] ToggleJoin clicked', { id, willJoin });
+                    console.log('[Events] ====== ToggleJoin clicked ======', { id, willJoin, currentAttendeesCount: event.attendeesCount });
                     joinMutation.mutate({ eventId: id, willJoin });
                   }}
                 />

@@ -16,6 +16,19 @@ import { useToast } from "@/hooks/use-toast";
 // Coordenadas de Santos, SP
 const SANTOS_CENTER = { lat: -23.9608, lng: -46.3332 };
 
+// Rota aproximada da Rua Tolentino Filgueiras (Santos, SP) para decoração especial
+// Pontos aproximados de oeste para leste
+const HALLOWEEN_TOLENTINO_POINTS: Array<{ lat: number; lng: number }> = [
+  { lat: -23.9632, lng: -46.3385 },
+  { lat: -23.9628, lng: -46.3373 },
+  { lat: -23.9624, lng: -46.3361 },
+  { lat: -23.9620, lng: -46.3349 },
+  { lat: -23.9616, lng: -46.3337 },
+  { lat: -23.9612, lng: -46.3326 },
+  { lat: -23.9609, lng: -46.3316 },
+  { lat: -23.9607, lng: -46.3306 },
+];
+
 interface Place {
   id: string;
   placeId: string;
@@ -58,6 +71,7 @@ export default function MapaCalor() {
   const [heatmap, setHeatmap] = useState<any>(null);
   const [markers, setMarkers] = useState<any[]>([]);
   const [eventMarkers, setEventMarkers] = useState<any[]>([]);
+  const [customOverlays, setCustomOverlays] = useState<any[]>([]);
   const mapRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -274,11 +288,13 @@ export default function MapaCalor() {
     // Limpar marcadores anteriores
     markers.forEach(marker => marker.setMap(null));
     eventMarkers.forEach(marker => marker.setMap(null));
+    customOverlays.forEach(overlay => overlay.setMap && overlay.setMap(null));
 
     // Gerar dados do heatmap
     const heatmapData: any[] = [];
     const newMarkers: any[] = [];
     const newEventMarkers: any[] = [];
+    const newCustomOverlays: any[] = [];
 
     // Renderizar lugares (heatmap + marcadores por popularidade/fechado)
     if (filteredPlaces && filteredPlaces.length > 0) {
@@ -363,6 +379,21 @@ export default function MapaCalor() {
     // Renderizar eventos aprovados (bolinha azul)
     if (Array.isArray(events) && events.length > 0) {
       events.forEach((ev) => {
+        // Exibir eventos apenas se a data selecionada estiver dentro do intervalo do evento
+        if (!(function(date: Date, startStr?: string, endStr?: string){
+          if (!startStr) return false;
+          const toYmd = (d: Date): string => {
+            const local = new Date(d.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+            const y = local.getFullYear();
+            const m = String(local.getMonth() + 1).padStart(2, '0');
+            const dd = String(local.getDate()).padStart(2, '0');
+            return `${y}-${m}-${dd}`;
+          };
+          const s = toYmd(new Date(startStr));
+          const e = endStr ? toYmd(new Date(endStr)) : s;
+          const sel = toYmd(date);
+          return sel >= s && sel <= e;
+        })(selectedDate, ev.startDateTime, ev.endDateTime)) return;
         const lat = ev.latitude ?? ev.location?.latitude;
         const lng = ev.longitude ?? ev.location?.longitude;
         const latNum = lat !== undefined ? parseFloat(lat.toString()) : undefined;
@@ -408,6 +439,46 @@ export default function MapaCalor() {
         marker.addListener('click', () => infoWindow.open(map, marker));
         newEventMarkers.push(marker);
       });
+    }
+
+    // Decoração especial: Halloween em 04/11 na Rua Tolentino Filgueiras
+    const isHalloweenTolentino = selectedDate.getDate() === 4 && selectedDate.getMonth() === 10; // 10 = Novembro
+    if (isHalloweenTolentino) {
+      // Distribuir morceguinhos ao longo da rua (pontos aproximados)
+      HALLOWEEN_TOLENTINO_POINTS.forEach((pos) => {
+        const marker = new google.maps.Marker({
+          position: new google.maps.LatLng(pos.lat, pos.lng),
+          map,
+          label: {
+            text: '🦇',
+            color: '#ffffff',
+            fontSize: '16px',
+          },
+          // Fundo azul (cor de evento) para destacar
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: '#3B82F6',
+            fillOpacity: 0.95,
+            strokeColor: '#ffffff',
+            strokeWeight: 2,
+          },
+          title: 'Halloween na Tolentino Filgueiras',
+          zIndex: 9999,
+        });
+        newCustomOverlays.push(marker);
+      });
+
+      // Traçar a rua com uma polyline azul (realce do trajeto)
+      const polyline = new google.maps.Polyline({
+        path: HALLOWEEN_TOLENTINO_POINTS.map((p) => new google.maps.LatLng(p.lat, p.lng)),
+        geodesic: true,
+        strokeColor: '#3B82F6',
+        strokeOpacity: 0.7,
+        strokeWeight: 4,
+      });
+      polyline.setMap(map);
+      newCustomOverlays.push(polyline);
     }
 
     // Criar novo heatmap
@@ -490,6 +561,7 @@ export default function MapaCalor() {
     setHeatmap(heatmapLayer);
     setMarkers(newMarkers);
     setEventMarkers(newEventMarkers);
+    setCustomOverlays(newCustomOverlays);
     
     // Cleanup
     return () => {
@@ -746,32 +818,34 @@ export default function MapaCalor() {
           </Card>
         </div>
 
-            {/* Legenda */}
-            <div className="flex items-center gap-4 text-sm text-gray-300">
-              <span className="font-semibold">Legenda:</span>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-green-500"></div>
-                <span>Tranquilo</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-yellow-500"></div>
-                <span>Moderado</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-orange-500"></div>
-                <span>Movimentado</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-red-500"></div>
-                <span>Muito Cheio</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-black"></div>
-                <span>Fechado</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-blue-500"></div>
-                <span>Evento</span>
+            {/* Legenda - Responsiva com scroll horizontal em mobile */}
+            <div className="w-full overflow-x-auto">
+              <div className="flex items-center gap-2 md:gap-4 text-xs md:text-sm text-gray-300 min-w-max px-1">
+                <span className="font-semibold whitespace-nowrap">Legenda:</span>
+                <div className="flex items-center gap-1.5 md:gap-2 whitespace-nowrap">
+                  <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-green-500 flex-shrink-0"></div>
+                  <span>Tranquilo</span>
+                </div>
+                <div className="flex items-center gap-1.5 md:gap-2 whitespace-nowrap">
+                  <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-yellow-500 flex-shrink-0"></div>
+                  <span>Moderado</span>
+                </div>
+                <div className="flex items-center gap-1.5 md:gap-2 whitespace-nowrap">
+                  <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-orange-500 flex-shrink-0"></div>
+                  <span>Movimentado</span>
+                </div>
+                <div className="flex items-center gap-1.5 md:gap-2 whitespace-nowrap">
+                  <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-red-500 flex-shrink-0"></div>
+                  <span>Muito Cheio</span>
+                </div>
+                <div className="flex items-center gap-1.5 md:gap-2 whitespace-nowrap">
+                  <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-black flex-shrink-0"></div>
+                  <span>Fechado</span>
+                </div>
+                <div className="flex items-center gap-1.5 md:gap-2 whitespace-nowrap">
+                  <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-blue-500 flex-shrink-0"></div>
+                  <span>Evento</span>
+                </div>
               </div>
             </div>
           </>
@@ -785,15 +859,104 @@ export default function MapaCalor() {
       {/* Navegação Fixa - Sempre visível na parte inferior */}
       <BottomNavigation currentPage="map" onNavigate={() => {}} />
 
-      {/* Lista de Lugares - Abaixo do mapa */}
-      {filteredPlaces && filteredPlaces.length > 0 && (
+      {/* Lista de Lugares e Eventos - Abaixo do mapa */}
+      {((filteredPlaces && filteredPlaces.length > 0) || (events && events.length > 0)) && (
         <div className="bg-slate-800 p-3 md:p-4 border-t border-slate-700 max-h-[35vh] md:max-h-[300px] overflow-y-auto">
           <h2 className="text-base md:text-lg font-bold text-white mb-2 md:mb-3 flex items-center gap-2">
             <MapPin className="h-4 w-4 md:h-5 md:w-5 text-blue-500" />
-            Lugares ({filteredPlaces.length})
+            Lugares e Eventos ({(filteredPlaces?.length || 0) + (events?.filter((ev) => {
+              if (!ev.startDateTime) return false;
+              const toYmd = (d: Date): string => {
+                const local = new Date(d.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+                const y = local.getFullYear();
+                const m = String(local.getMonth() + 1).padStart(2, '0');
+                const dd = String(local.getDate()).padStart(2, '0');
+                return `${y}-${m}-${dd}`;
+              };
+              const s = toYmd(new Date(ev.startDateTime));
+              const e = ev.endDateTime ? toYmd(new Date(ev.endDateTime)) : s;
+              const sel = toYmd(selectedDate);
+              return sel >= s && sel <= e;
+            }).length || 0)})
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
-            {filteredPlaces.map(place => {
+            {/* Primeiro: Eventos (prioridade) */}
+            {events && Array.isArray(events) && events
+              .filter((ev) => {
+                // Filtrar eventos que estão dentro do intervalo da data selecionada
+                if (!ev.startDateTime) return false;
+                const toYmd = (d: Date): string => {
+                  const local = new Date(d.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+                  const y = local.getFullYear();
+                  const m = String(local.getMonth() + 1).padStart(2, '0');
+                  const dd = String(local.getDate()).padStart(2, '0');
+                  return `${y}-${m}-${dd}`;
+                };
+                const s = toYmd(new Date(ev.startDateTime));
+                const e = ev.endDateTime ? toYmd(new Date(ev.endDateTime)) : s;
+                const sel = toYmd(selectedDate);
+                return sel >= s && sel <= e;
+              })
+              .map((ev) => {
+                const lat = ev.latitude ?? ev.location?.latitude;
+                const lng = ev.longitude ?? ev.location?.longitude;
+                const latNum = lat !== undefined ? parseFloat(lat.toString()) : undefined;
+                const lngNum = lng !== undefined ? parseFloat(lng.toString()) : undefined;
+                if (typeof latNum !== 'number' || isNaN(latNum) || typeof lngNum !== 'number' || isNaN(lngNum)) return null;
+
+                return (
+                  <Card 
+                    key={`event-${ev.id}`} 
+                    className="bg-blue-900/30 border-blue-500 cursor-pointer hover:bg-blue-900/50 transition-colors hover:border-blue-400"
+                    onClick={() => {
+                      if (map && latNum && lngNum) {
+                        map.panTo({ lat: latNum, lng: lngNum });
+                        map.setZoom(16);
+                        toast({
+                          title: "🎫 " + (ev.title || 'Evento'),
+                          description: `${(ev as any).attendeesCount || 0} pessoas vão`,
+                        });
+                      }
+                    }}
+                  >
+                    <CardContent className="p-2 md:p-3">
+                      <div className="flex items-start gap-2">
+                        {/* Indicador azul para evento */}
+                        <div 
+                          className="w-3 h-3 md:w-4 md:h-4 rounded-full flex-shrink-0 mt-1 bg-blue-500" 
+                        ></div>
+                        
+                        <div className="flex-1 min-w-0">
+                          {/* Nome/Título do evento */}
+                          <h3 className="text-sm md:text-md font-semibold text-white truncate">
+                            🎫 {ev.title || 'Evento'}
+                          </h3>
+                          
+                          {/* Data/horário */}
+                          <div className="flex items-center gap-1 mt-1">
+                            {ev.startDateTime && (
+                              <span className="text-xs md:text-sm text-gray-300">
+                                📅 {new Date(ev.startDateTime).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                                {ev.startDateTime.includes('T') && ` ${new Date(ev.startDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Contagem de participantes */}
+                          <div className="flex items-center gap-1 mt-1">
+                            <span className="text-xs md:text-sm font-bold text-blue-400">
+                              👥 {(ev as any).attendeesCount || 0} {(ev as any).attendeesCount === 1 ? 'pessoa vai' : 'pessoas vão'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            
+            {/* Depois: Lugares */}
+            {filteredPlaces && filteredPlaces.map(place => {
               const dayKey = selectedDay as keyof typeof place.popularTimes;
               const popularity = place.popularTimes?.[dayKey]?.[selectedHour] || 0;
               const isClosed = popularity === 0 || (place as any).openingHours?.[dayKey]?.closed === true;
@@ -816,7 +979,7 @@ export default function MapaCalor() {
                       // Feedback visual
                       // Mensagem do toast
                       const statusMessage = popularity === 0 
-                        ? 'Fechado no momento'
+                        ? 'Fechado'
                         : `${getPopularityLabel(popularity)} - ${popularity}%`;
                       
                       toast({
