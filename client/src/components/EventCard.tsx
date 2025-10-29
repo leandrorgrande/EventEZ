@@ -12,7 +12,7 @@ interface EventCardProps {
 export default function EventCard({ event, isGoing, onToggleJoin }: EventCardProps) {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
+    return date.toLocaleDateString("pt-BR", {
       weekday: "short",
       month: "short",
       day: "numeric",
@@ -21,10 +21,10 @@ export default function EventCard({ event, isGoing, onToggleJoin }: EventCardPro
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleTimeString("en-US", {
+    return date.toLocaleTimeString("pt-BR", {
       hour: "numeric",
       minute: "2-digit",
-      hour12: true,
+      hour12: false,
     });
   };
 
@@ -86,7 +86,7 @@ export default function EventCard({ event, isGoing, onToggleJoin }: EventCardPro
           <div className="flex items-center text-sm text-gray-300">
             <Users className="h-4 w-4 mr-2 text-gray-400" />
             <span data-testid={`text-event-attendees-${event.id}`}>
-              {event.attendeesCount || 0} going
+              {event.attendeesCount || 0} {event.attendeesCount === 1 ? 'pessoa vai' : 'pessoas vão'}
             </span>
           </div>
         </div>
@@ -97,14 +97,14 @@ export default function EventCard({ event, isGoing, onToggleJoin }: EventCardPro
             onClick={() => onToggleJoin?.(event.id, !isGoing)}
             data-testid={`button-join-event-${event.id}`}
           >
-            {isGoing ? 'Joined' : 'Join Event'}
+            {isGoing ? 'Participando' : 'Participar'}
           </Button>
           <Button
             variant="secondary"
             className="bg-gray-600 hover:bg-gray-700"
             data-testid={`button-share-event-${event.id}`}
           >
-            Share
+            Compartilhar
           </Button>
         </div>
       </CardContent>

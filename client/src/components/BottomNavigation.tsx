@@ -23,19 +23,19 @@ export default function BottomNavigation({ currentPage, onNavigate }: BottomNavi
   const navItems = [
     {
       id: "map",
-      label: "Map",
+      label: "Mapa",
       icon: Map,
       href: "/",
     },
     {
       id: "events",
-      label: "Events",
+      label: "Eventos",
       icon: Calendar,
       href: "/events",
     },
     {
       id: "profile",
-      label: "Profile",
+      label: "Perfil",
       icon: User,
       href: "/profile",
     },

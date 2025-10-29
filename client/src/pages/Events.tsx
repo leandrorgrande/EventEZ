@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { db, auth } from "@/lib/firebase";
-import { collection, getDocs, query as fsQuery, where } from "firebase/firestore";
+import { auth } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,17 +17,19 @@ export default function Events() {
   const queryClient = useQueryClient();
 
   const { data: events, isLoading } = useQuery({
-    queryKey: ["firestore/events", { eventType: filterType }],
+    queryKey: ["api/events", { eventType: filterType }],
     queryFn: async () => {
-      const eventsRef = collection(db, "events");
-      const constraints: any[] = [where("approvalStatus", "==", "approved")];
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : undefined;
+      const url = new URL(`${API_URL}/events`);
       if (filterType && filterType !== "all") {
-        constraints.push(where("eventType", "==", filterType));
+        url.searchParams.append('eventType', filterType);
       }
-
-      const q = constraints.length > 0 ? fsQuery(eventsRef, ...constraints) : eventsRef;
-      const snapshot = await getDocs(q as any);
-      const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as any));
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const response = await fetch(url.toString(), { headers });
+      if (!response.ok) throw new Error('Falha ao buscar eventos');
+      const items = await response.json();
       // Ordenar por data de início (mais recentes primeiro)
       items.sort((a: any, b: any) => new Date(b.startDateTime).getTime() - new Date(a.startDateTime).getTime());
       return items;
@@ -66,8 +67,8 @@ export default function Events() {
     onMutate: async ({ eventId, willJoin }) => {
       console.log('[Events] ====== onMutate START (optimistic update) ======');
       console.log('[Events] onMutate params:', { eventId, willJoin });
-      await queryClient.cancelQueries({ queryKey: ["firestore/events", { eventType: filterType }] });
-      const prev = queryClient.getQueryData<any[]>(["firestore/events", { eventType: filterType }]);
+      await queryClient.cancelQueries({ queryKey: ["api/events", { eventType: filterType }] });
+      const prev = queryClient.getQueryData<any[]>(["api/events", { eventType: filterType }]);
       console.log('[Events] Previous cache data:', prev?.map(e => ({ id: e.id, attendeeIds: e.attendeeIds, attendeesCount: e.attendeesCount })));
       
       if (prev) {
@@ -106,7 +107,7 @@ export default function Events() {
         });
         
         console.log('[Events] New cache data:', next?.map(e => ({ id: e.id, attendeeIds: e.attendeeIds, attendeesCount: e.attendeesCount })));
-        queryClient.setQueryData(["firestore/events", { eventType: filterType }], next);
+        queryClient.setQueryData(["api/events", { eventType: filterType }], next);
         console.log('[Events] ====== onMutate END (cache updated) ======');
       } else {
         console.log('[Events] No previous data found');
@@ -120,7 +121,7 @@ export default function Events() {
       console.log('[Events] Response attendeesCount:', data?.attendeesCount);
       
       // Atualizar cache com dados da resposta da API (que já tem attendeeIds atualizado)
-      const currentData = queryClient.getQueryData<any[]>(["firestore/events", { eventType: filterType }]);
+      const currentData = queryClient.getQueryData<any[]>(["api/events", { eventType: filterType }]);
       console.log('[Events] Current cache before update:', currentData?.map(e => ({ id: e.id, attendeeIds: e.attendeeIds, attendeesCount: e.attendeesCount })));
       
       if (currentData && data?.id) {
@@ -154,7 +155,7 @@ export default function Events() {
           return e;
         });
         
-        queryClient.setQueryData(["firestore/events", { eventType: filterType }], updated);
+        queryClient.setQueryData(["api/events", { eventType: filterType }], updated);
         const updatedEvent = updated.find((e: any) => e.id === data.id);
         console.log('[Events] Cache updated with API response:', updatedEvent);
         console.log('[Events] New cache data:', updated?.map(e => ({ id: e.id, attendeeIds: e.attendeeIds, attendeesCount: e.attendeesCount })));
@@ -162,13 +163,12 @@ export default function Events() {
         console.log('[Events] Could not update cache - missing data.id or currentData');
       }
       
-      // Invalidate após um delay para garantir que o Firestore tenha sido atualizado
-      console.log('[Events] Scheduling invalidation in 1000ms...');
+      // Não invalidar queries imediatamente - o cache já foi atualizado com os dados corretos da API
+      // Invalidar apenas após um delay maior para sincronizar eventualmente com Firestore
       setTimeout(() => {
-        console.log('[Events] ====== Invalidating queries ======');
-        queryClient.invalidateQueries({ queryKey: ["firestore/events", { eventType: filterType }] });
-        console.log('[Events] ====== Queries invalidated - this will trigger a refetch ======');
-      }, 1000);
+        console.log('[Events] ====== Invalidating queries após delay ======');
+        queryClient.invalidateQueries({ queryKey: ["api/events", { eventType: filterType }] });
+      }, 3000); // Delay maior para evitar race condition
       
       // Feedback
       import('@/hooks/use-toast').then(({ useToast }) => {
@@ -182,7 +182,7 @@ export default function Events() {
     onError: (error, _vars, context) => {
       console.error('[Events] Join mutate error', error);
       if ((context as any)?.prev) {
-        queryClient.setQueryData(["firestore/events", { eventType: filterType }], (context as any).prev);
+        queryClient.setQueryData(["api/events", { eventType: filterType }], (context as any).prev);
       }
     }
   });
@@ -192,14 +192,14 @@ export default function Events() {
       {/* Header */}
       <div className="sticky top-0 z-20 bg-slate-800/90 backdrop-blur-md border-b border-slate-700 p-4">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold" data-testid="text-events-title">Events</h1>
+          <h1 className="text-2xl font-bold" data-testid="text-events-title">Eventos</h1>
           <Button
             onClick={() => setShowCreateModal(true)}
             className="bg-blue-600 hover:bg-blue-700"
             data-testid="button-create-event"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Create
+            Criar
           </Button>
         </div>
 
@@ -208,7 +208,7 @@ export default function Events() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
-              placeholder="Search events..."
+              placeholder="Buscar eventos..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 bg-slate-700 border-slate-600 text-white placeholder-gray-400"
@@ -221,13 +221,13 @@ export default function Events() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="clubs">Clubs</SelectItem>
-              <SelectItem value="bars">Bars</SelectItem>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="clubs">Baladas</SelectItem>
+              <SelectItem value="bars">Bares</SelectItem>
               <SelectItem value="shows">Shows</SelectItem>
-              <SelectItem value="fairs">Fairs</SelectItem>
-              <SelectItem value="food">Food</SelectItem>
-              <SelectItem value="other">Other</SelectItem>
+              <SelectItem value="fairs">Feiras</SelectItem>
+              <SelectItem value="food">Comida</SelectItem>
+              <SelectItem value="other">Outros</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -254,12 +254,12 @@ export default function Events() {
           <Card className="bg-slate-800 border-slate-700 text-center py-12">
             <CardContent>
               <h3 className="text-lg font-semibold text-white mb-2" data-testid="text-no-events">
-                No events found
+                Nenhum evento encontrado
               </h3>
               <p className="text-gray-400 mb-4">
                 {searchQuery || filterType !== "all" 
-                  ? "Try adjusting your search or filters" 
-                  : "Be the first to create an event in your area!"}
+                  ? "Tente ajustar sua busca ou filtros" 
+                  : "Seja o primeiro a criar um evento na sua área!"}
               </p>
               <Button
                 onClick={() => setShowCreateModal(true)}
@@ -267,7 +267,7 @@ export default function Events() {
                 data-testid="button-create-first-event"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Create Event
+                Criar Evento
               </Button>
             </CardContent>
           </Card>

@@ -19,14 +19,17 @@ const SANTOS_CENTER = { lat: -23.9608, lng: -46.3332 };
 // Rota aproximada da Rua Tolentino Filgueiras (Santos, SP) para decoração especial
 // Pontos aproximados de oeste para leste
 const HALLOWEEN_TOLENTINO_POINTS: Array<{ lat: number; lng: number }> = [
-  { lat: -23.9632, lng: -46.3385 },
-  { lat: -23.9628, lng: -46.3373 },
-  { lat: -23.9624, lng: -46.3361 },
-  { lat: -23.9620, lng: -46.3349 },
-  { lat: -23.9616, lng: -46.3337 },
-  { lat: -23.9612, lng: -46.3326 },
-  { lat: -23.9609, lng: -46.3316 },
-  { lat: -23.9607, lng: -46.3306 },
+  // Traçado entre (-23.964271, -46.334800) e (-23.964840, -46.329028)
+  { lat: -23.964271, lng: -46.3348 },
+  { lat: -23.964334222, lng: -46.334158667 },
+  { lat: -23.964397444, lng: -46.333517333 },
+  { lat: -23.964460666, lng: -46.332876 },
+  { lat: -23.964523888, lng: -46.332234667 },
+  { lat: -23.96458711, lng: -46.331593333 },
+  { lat: -23.964650332, lng: -46.330952 },
+  { lat: -23.964713554, lng: -46.330310667 },
+  { lat: -23.964776776, lng: -46.329669333 },
+  { lat: -23.96484, lng: -46.329028 },
 ];
 
 interface Place {
