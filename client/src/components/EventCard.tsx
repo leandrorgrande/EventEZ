@@ -40,6 +40,13 @@ export default function EventCard({ event, isGoing, onToggleJoin }: EventCardPro
     return colors[type] || colors.other;
   };
 
+  const getEventEnded = (): boolean => {
+    const end = event.endDateTime ? new Date(event.endDateTime) : (event.startDateTime ? new Date(event.startDateTime) : null);
+    return end ? end.getTime() < Date.now() : false;
+  };
+
+  const isPast = getEventEnded();
+
   return (
     <Card className="bg-slate-800 border-slate-700 hover:border-slate-600 transition-colors">
       <CardHeader className="pb-3">
@@ -86,7 +93,9 @@ export default function EventCard({ event, isGoing, onToggleJoin }: EventCardPro
           <div className="flex items-center text-sm text-gray-300">
             <Users className="h-4 w-4 mr-2 text-gray-400" />
             <span data-testid={`text-event-attendees-${event.id}`}>
-              {event.attendeesCount || 0} {event.attendeesCount === 1 ? 'pessoa vai' : 'pessoas vão'}
+              {event.attendeesCount || 0} {isPast
+                ? (event.attendeesCount === 1 ? 'pessoa foi' : 'pessoas foram')
+                : (event.attendeesCount === 1 ? 'pessoa vai' : 'pessoas vão')}
             </span>
           </div>
         </div>
@@ -97,7 +106,7 @@ export default function EventCard({ event, isGoing, onToggleJoin }: EventCardPro
             onClick={() => onToggleJoin?.(event.id, !isGoing)}
             data-testid={`button-join-event-${event.id}`}
           >
-            {isGoing ? 'Participando' : 'Participar'}
+            {isPast ? (isGoing ? 'Você foi' : 'Você não foi') : (isGoing ? 'Participando' : 'Participar')}
           </Button>
           <Button
             variant="secondary"

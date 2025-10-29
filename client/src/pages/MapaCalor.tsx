@@ -81,6 +81,8 @@ export default function MapaCalor() {
   const { toast } = useToast();
   const { isAdmin } = useAuth();
   const [isUpdatingAll, setIsUpdatingAll] = useState(false);
+  const [updateSummary, setUpdateSummary] = useState<{ total: number; updated: number; errors: number; current?: string } | null>(null);
+  const updateAbortRef = useRef<AbortController | null>(null);
 
   // Obter horário atual de Brasília
   const getBrasiliaTime = () => {
@@ -835,33 +837,79 @@ export default function MapaCalor() {
                 variant="outline"
                 size="sm"
                 onClick={async () => {
+                  if (isUpdatingAll) {
+                    updateAbortRef.current?.abort();
+                    return;
+                  }
                   try {
                     setIsUpdatingAll(true);
+                    setUpdateSummary({ total: 0, updated: 0, errors: 0 });
                     const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
                     const token = await auth.currentUser?.getIdToken();
-                    const resp = await fetch(`${API_URL}/places/update-all-hours`, {
+                    const controller = new AbortController();
+                    updateAbortRef.current = controller;
+                    const resp = await fetch(`${API_URL}/places/update-all-hours-stream`, {
                       method: 'POST',
-                      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+                      headers: token ? { 'Authorization': `Bearer ${token}`, 'Accept': 'text/event-stream' } : { 'Accept': 'text/event-stream' },
+                      signal: controller.signal
                     });
-                    const data = await resp.json();
-                    if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
-                    toast({
-                      title: 'Lugares atualizados',
-                      description: `Atualizados: ${data.updated} / ${data.total} • Erros: ${data.errors}`
-                    });
+                    if (!resp.ok || !resp.body) {
+                      throw new Error(`HTTP ${resp.status}`);
+                    }
+                    const reader = resp.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+                    const processChunk = (text: string) => {
+                      buffer += text;
+                      const parts = buffer.split('\n\n');
+                      buffer = parts.pop() || '';
+                      for (const part of parts) {
+                        const line = part.trim();
+                        if (!line.startsWith('data:')) continue;
+                        const jsonStr = line.slice(5).trim();
+                        try {
+                          const evt = JSON.parse(jsonStr);
+                          if (evt.type === 'start') {
+                            setUpdateSummary({ total: evt.total || 0, updated: 0, errors: 0 });
+                          } else if (evt.type === 'progress') {
+                            setUpdateSummary(prev => prev ? { ...prev, current: evt.placeName || prev.current, updated: evt.status === 'updated' ? prev.updated + 1 : prev.updated, errors: evt.status === 'error' ? prev.errors + 1 : prev.errors } : prev);
+                          } else if (evt.type === 'end' || evt.type === 'cancelled') {
+                            setUpdateSummary(prev => prev ? { ...prev, updated: evt.updated ?? prev.updated, errors: evt.errors ?? prev.errors } : prev);
+                          }
+                        } catch {}
+                      }
+                    };
+                    while (true) {
+                      const { done, value } = await reader.read();
+                      if (done) break;
+                      processChunk(decoder.decode(value, { stream: true }));
+                    }
+                    toast({ title: 'Atualização concluída', description: `${(updateSummary?.updated) || 0} atualizados, ${(updateSummary?.errors) || 0} erros` });
                     refetch();
                   } catch (err: any) {
-                    toast({ title: 'Erro ao atualizar lugares', description: err.message || String(err), variant: 'destructive' });
+                    if (err.name === 'AbortError') {
+                      toast({ title: 'Atualização interrompida', description: 'Processo cancelado.' });
+                    } else {
+                      toast({ title: 'Erro ao atualizar lugares', description: err.message || String(err), variant: 'destructive' });
+                    }
                   } finally {
                     setIsUpdatingAll(false);
+                    updateAbortRef.current = null;
                   }
                 }}
-                disabled={isUpdatingAll}
                 className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
               >
-                <RefreshCw className="h-4 w-4 mr-1" /> Atualizar horários/avaliações
+                <RefreshCw className={`h-4 w-4 mr-1 ${isUpdatingAll ? 'animate-spin' : ''}`} /> {isUpdatingAll ? 'Parar atualização' : 'Atualizar horários/avaliações'}
               </Button>
             </div>
+            )}
+            {isAdmin && updateSummary && (
+              <div className="w-full text-xs text-gray-300 flex items-center justify-end gap-3 pr-1">
+                <span>Total: {updateSummary.total}</span>
+                <span className="text-green-400">Atualizados: {updateSummary.updated}</span>
+                <span className="text-red-400">Erros: {updateSummary.errors}</span>
+                {updateSummary.current && <span className="text-gray-400 truncate max-w-[40%]">Atual: {updateSummary.current}</span>}
+              </div>
             )}
 
             {/* Controles */}
