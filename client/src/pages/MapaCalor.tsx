@@ -216,8 +216,13 @@ export default function MapaCalor() {
           // Filtro de status (apenas abertos)
           if (statusFilter === 'openOnly') {
             const dayKey: any = selectedDay;
-            const popularity = (place as any).popularTimes?.[dayKey]?.[selectedHour] ?? 0;
-            const isClosed = popularity === 0 || (place as any).openingHours?.[dayKey]?.closed === true;
+            // Verificar primeiro se está fechado pelas openingHours
+            const isClosedByHours = (place as any).openingHours?.[dayKey]?.closed === true;
+            // Obter popularidade (0 se não existir ou se estiver fechado)
+            const rawPopularity = (place as any).popularTimes?.[dayKey]?.[selectedHour];
+            const popularity = isClosedByHours ? 0 : (rawPopularity !== undefined ? rawPopularity : 0);
+            // Está fechado se popularidade é 0 ou se explicitamente marcado como closed
+            const isClosed = popularity === 0 || isClosedByHours;
             if (isClosed) return false;
           }
           return true;
@@ -305,8 +310,13 @@ export default function MapaCalor() {
       if (!place.latitude || !place.longitude || !place.popularTimes) return;
 
       const dayKey = selectedDay as keyof typeof place.popularTimes;
-      const popularity = place.popularTimes[dayKey]?.[selectedHour] || 50;
-      const isClosed = popularity === 0 || (place as any).openingHours?.[dayKey]?.closed === true;
+      // Verificar primeiro se está fechado pelas openingHours
+      const isClosedByHours = (place as any).openingHours?.[dayKey]?.closed === true;
+      // Obter popularidade (0 se não existir ou se estiver fechado)
+      const rawPopularity = place.popularTimes[dayKey]?.[selectedHour];
+      const popularity = isClosedByHours ? 0 : (rawPopularity !== undefined ? rawPopularity : 0);
+      // Está fechado se popularidade é 0 ou se explicitamente marcado como closed
+      const isClosed = popularity === 0 || isClosedByHours;
 
       // Adicionar ao heatmap com peso baseado na popularidade
       const location = new (google as any).maps.LatLng(
@@ -961,8 +971,13 @@ export default function MapaCalor() {
             {/* Depois: Lugares */}
             {filteredPlaces && filteredPlaces.map(place => {
               const dayKey = selectedDay as keyof typeof place.popularTimes;
-              const popularity = place.popularTimes?.[dayKey]?.[selectedHour] || 0;
-              const isClosed = popularity === 0 || (place as any).openingHours?.[dayKey]?.closed === true;
+              // Verificar primeiro se está fechado pelas openingHours
+              const isClosedByHours = (place as any).openingHours?.[dayKey]?.closed === true;
+              // Obter popularidade (0 se não existir ou se estiver fechado)
+              const rawPopularity = place.popularTimes?.[dayKey]?.[selectedHour];
+              const popularity = isClosedByHours ? 0 : (rawPopularity !== undefined ? rawPopularity : 0);
+              // Está fechado se popularidade é 0 ou se explicitamente marcado como closed
+              const isClosed = popularity === 0 || isClosedByHours;
               const color = isClosed ? '#000000' : getColorByPopularity(popularity);
               
               return (

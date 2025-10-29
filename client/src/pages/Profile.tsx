@@ -92,9 +92,9 @@ export default function Profile() {
     return (
       <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">Not logged in</h2>
+          <h2 className="text-2xl font-bold mb-4">Não está logado</h2>
           <Button onClick={() => window.location.href = "/api/login"}>
-            Log In
+            Entrar
           </Button>
         </div>
       </div>
@@ -120,7 +120,7 @@ export default function Profile() {
             </h1>
             <p className="text-gray-400" data-testid="text-user-email">{userProfile.email}</p>
             <Badge variant="secondary" className="mt-1">
-              {userProfile.userType === "business" ? "Business" : userProfile.userType === "admin" ? "Admin" : "Regular User"}
+              {userProfile.userType === "business" ? "Empresa" : userProfile.userType === "admin" ? "Admin" : "Usuário"}
             </Badge>
           </div>
           <Button
@@ -131,7 +131,7 @@ export default function Profile() {
             data-testid="button-edit-profile"
           >
             <Edit3 className="h-4 w-4 mr-2" />
-            Edit
+            Editar
           </Button>
         </div>
       </div>
@@ -145,7 +145,7 @@ export default function Profile() {
               <div className="text-2xl font-bold text-white" data-testid="text-events-created">
                 {userEvents?.length || 0}
               </div>
-              <div className="text-sm text-gray-400">Events Created</div>
+              <div className="text-sm text-gray-400">Eventos Criados</div>
             </CardContent>
           </Card>
 
@@ -155,7 +155,7 @@ export default function Profile() {
               <div className="text-2xl font-bold text-white" data-testid="text-events-attended">
                 0
               </div>
-              <div className="text-sm text-gray-400">Events Attended</div>
+              <div className="text-sm text-gray-400">Eventos Participados</div>
             </CardContent>
           </Card>
         </div>
@@ -163,8 +163,8 @@ export default function Profile() {
         {/* Recent Events */}
         <Card className="bg-slate-800 border-slate-700 mb-6">
           <CardHeader>
-            <CardTitle className="text-white">Your Events</CardTitle>
-            <CardDescription>Events you've created</CardDescription>
+            <CardTitle className="text-white">Seus Eventos</CardTitle>
+            <CardDescription>Eventos que você criou</CardDescription>
           </CardHeader>
           <CardContent>
             {userEvents && userEvents.length > 0 ? (
@@ -217,7 +217,7 @@ export default function Profile() {
               </div>
             ) : (
               <p className="text-gray-400 text-center py-4" data-testid="text-no-events">
-                You haven't created any events yet
+                Você ainda não criou nenhum evento
               </p>
             )}
           </CardContent>
@@ -232,7 +232,7 @@ export default function Profile() {
             data-testid="button-settings"
           >
             <Settings className="mr-3 h-5 w-5 text-gray-400" />
-            Settings
+            Configurações
           </Button>
 
           <Button
@@ -242,7 +242,7 @@ export default function Profile() {
             data-testid="button-history"
           >
             <History className="mr-3 h-5 w-5 text-gray-400" />
-            Event History
+            Histórico de Eventos
           </Button>
 
           {isAdmin && (
@@ -253,7 +253,7 @@ export default function Profile() {
               data-testid="button-admin"
             >
               <Shield className="mr-3 h-5 w-5" />
-              Admin Dashboard
+              Painel Admin
             </Button>
           )}
 
@@ -265,7 +265,7 @@ export default function Profile() {
               data-testid="button-claim-business"
             >
               <Building2 className="mr-3 h-5 w-5 text-gray-400" />
-              Claim Business
+              Reivindicar Empresa
             </Button>
           )}
 
@@ -276,7 +276,7 @@ export default function Profile() {
             data-testid="button-logout"
           >
             <LogOut className="mr-3 h-5 w-5" />
-            Sign Out
+            Sair
           </Button>
         </div>
       </div>
