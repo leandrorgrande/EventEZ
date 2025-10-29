@@ -85,9 +85,29 @@ export default function Events() {
       }
       return { prev };
     },
-    onSuccess: (_data, params) => {
-      // Recarregar lista
-      queryClient.invalidateQueries({ queryKey: ["firestore/events", { eventType: filterType }] });
+    onSuccess: (data, params) => {
+      console.log('[Events] onSuccess - updating cache with API response', data);
+      // Atualizar cache com dados da resposta da API (que já tem attendeeIds atualizado)
+      const currentData = queryClient.getQueryData<any[]>(["firestore/events", { eventType: filterType }]);
+      if (currentData && data?.id) {
+        const updated = currentData.map((e: any) => {
+          if (e.id === data.id) {
+            // Usar dados da API que já tem attendeeIds e attendeesCount atualizados
+            return {
+              ...e,
+              attendeeIds: data.attendeeIds || e.attendeeIds,
+              attendeesCount: data.attendeesCount !== undefined ? data.attendeesCount : (Array.isArray(data.attendeeIds) ? data.attendeeIds.length : (e.attendeesCount || 0))
+            };
+          }
+          return e;
+        });
+        queryClient.setQueryData(["firestore/events", { eventType: filterType }], updated);
+        console.log('[Events] Cache updated with API response', updated.find((e: any) => e.id === data.id));
+      }
+      // Invalidate após um delay para garantir que o Firestore tenha sido atualizado
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["firestore/events", { eventType: filterType }] });
+      }, 1000);
       // Feedback
       import('@/hooks/use-toast').then(({ useToast }) => {
         try {
@@ -101,9 +121,6 @@ export default function Events() {
       if ((context as any)?.prev) {
         queryClient.setQueryData(["firestore/events", { eventType: filterType }], (context as any).prev);
       }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["firestore/events", { eventType: filterType }] });
     }
   });
 

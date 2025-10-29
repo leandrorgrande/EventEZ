@@ -351,9 +351,19 @@ app.patch('/events/:eventId', authenticate, async (req: express.Request, res: ex
     
     await eventRef.update(updateData);
     
+    // Buscar documento atualizado
     const updatedSnap = await eventRef.get();
     const updatedEvent = { id: updatedSnap.id, ...updatedSnap.data() } as any;
-    (updatedEvent as any).attendeesCount = Array.isArray(updatedEvent.attendeeIds) ? updatedEvent.attendeeIds.length : 0;
+    
+    // Garantir que attendeeIds seja um array
+    if (!Array.isArray(updatedEvent.attendeeIds)) {
+      updatedEvent.attendeeIds = [];
+    }
+    
+    // Calcular contagem corretamente
+    updatedEvent.attendeesCount = updatedEvent.attendeeIds.length;
+    
+    console.log('[API] Event updated - attendeeIds:', updatedEvent.attendeeIds, 'attendeesCount:', updatedEvent.attendeesCount);
     
     res.json(updatedEvent);
   } catch (error) {

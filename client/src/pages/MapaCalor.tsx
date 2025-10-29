@@ -80,6 +80,7 @@ export default function MapaCalor() {
   const [selectedDate, setSelectedDate] = useState<Date>(brasiliaTime); // Padrão: Data atual
   const [selectedHour, setSelectedHour] = useState<number>(brasiliaTime.getHours()); // Padrão: Hora atual
   const [selectedType, setSelectedType] = useState<string>('all'); // Filtro de tipo
+  const [statusFilter, setStatusFilter] = useState<'all' | 'openOnly'>('all'); // Filtro de status
   const [minRating, setMinRating] = useState<number>(0); // Filtro de avaliação mínima
   const [filtersExpanded, setFiltersExpanded] = useState<boolean>(true); // Controle de expansão dos filtros
 
@@ -183,19 +184,28 @@ export default function MapaCalor() {
   }, [places]);
 
   // Filtrar lugares (FORA do useEffect para usar na lista)
-  const filteredPlaces = places
-    ? places.filter(place => {
-        // Filtro de tipo
-        if (selectedType !== 'all' && (!place.types || !place.types.includes(selectedType))) {
-          return false;
-        }
-        // Filtro de avaliação
-        if (minRating > 0 && (!place.rating || place.rating < minRating)) {
-          return false;
-        }
-        return true;
-      })
-    : [];
+  const filteredPlaces = selectedType === 'event'
+    ? []
+    : (places
+      ? places.filter(place => {
+          // Filtro de tipo
+          if (selectedType !== 'all' && (!place.types || !place.types.includes(selectedType))) {
+            return false;
+          }
+          // Filtro de avaliação
+          if (minRating > 0 && (!place.rating || place.rating < minRating)) {
+            return false;
+          }
+          // Filtro de status (apenas abertos)
+          if (statusFilter === 'openOnly') {
+            const dayKey: any = selectedDay;
+            const popularity = (place as any).popularTimes?.[dayKey]?.[selectedHour] ?? 0;
+            const isClosed = popularity === 0 || (place as any).openingHours?.[dayKey]?.closed === true;
+            if (isClosed) return false;
+          }
+          return true;
+        })
+      : []);
 
   // Debug: Log quando places mudar
   useEffect(() => {
@@ -270,13 +280,14 @@ export default function MapaCalor() {
     const newMarkers: any[] = [];
     const newEventMarkers: any[] = [];
 
-    // Renderizar lugares (heatmap + marcadores por popularidade)
+    // Renderizar lugares (heatmap + marcadores por popularidade/fechado)
     if (filteredPlaces && filteredPlaces.length > 0) {
       filteredPlaces.forEach(place => {
       if (!place.latitude || !place.longitude || !place.popularTimes) return;
 
       const dayKey = selectedDay as keyof typeof place.popularTimes;
       const popularity = place.popularTimes[dayKey]?.[selectedHour] || 50;
+      const isClosed = popularity === 0 || (place as any).openingHours?.[dayKey]?.closed === true;
 
       // Adicionar ao heatmap com peso baseado na popularidade
       const location = new (google as any).maps.LatLng(
@@ -293,27 +304,26 @@ export default function MapaCalor() {
         heatmapData.push({ location, weight });
       }
 
-      // Adicionar marcador se popularidade > 40% (reduzido para mostrar mais lugares)
-      if (popularity >= 40) {
+      // Adicionar marcador: se fechado ou se popularidade > 40%
+      if (isClosed || popularity >= 40) {
         const marker = new google.maps.Marker({
           position: location,
           map,
-          title: `${place.name} - ${popularity}%`,
+          title: isClosed ? `${place.name} - 🔒 Fechado` : `${place.name} - ${popularity}%`,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: 6 + (popularity / 8), // Tamanho baseado na popularidade
-            fillColor: getColorByPopularity(popularity),
+            scale: isClosed ? 6 : 6 + (popularity / 8), // Tamanho menor para fechado
+            fillColor: isClosed ? '#000000' : getColorByPopularity(popularity),
             fillOpacity: 0.9,
             strokeColor: '#ffffff',
             strokeWeight: 2,
           },
-          animation: popularity >= 80 ? google.maps.Animation.BOUNCE : undefined,
+          animation: isClosed ? undefined : (popularity >= 80 ? google.maps.Animation.BOUNCE : undefined),
         });
 
         // InfoWindow ao clicar
-        const isClosed = popularity === 0;
         const statusLabel = isClosed ? '🔒 Fechado' : `Movimento ${getPopularityLabel(popularity)}`;
-        const bgColor = isClosed ? '#ef4444' : getColorByPopularity(popularity);
+        const bgColor = isClosed ? '#000000' : getColorByPopularity(popularity);
         
         const infoWindow = new google.maps.InfoWindow({
           content: `
@@ -446,7 +456,7 @@ export default function MapaCalor() {
           .map(p => {
             const pop = (p as any).popularTimes?.[dayKey]?.[selectedHour] || 50;
             const statusLabel = pop === 0 ? '🔒 Fechado' : `Movimento ${getPopularityLabel(pop)}`;
-            const statusColor = pop === 0 ? '#ef4444' : getColorByPopularity(pop);
+            const statusColor = pop === 0 ? '#000000' : getColorByPopularity(pop);
             return `
               <div style="padding: 8px; border-bottom: 1px solid #e5e7eb;">
                 <strong style="color: #1f2937;">${p.name}</strong>
@@ -485,7 +495,7 @@ export default function MapaCalor() {
     return () => {
       google.maps.event.removeListener(mapClickListener);
     };
-  }, [map, places, events, selectedDay, selectedHour, selectedType, minRating]);
+  }, [map, places, events, selectedDay, selectedHour, selectedType, minRating, statusFilter]);
 
   // Funções auxiliares
   const getColorByPopularity = (popularity: number): string => {
@@ -690,6 +700,7 @@ export default function MapaCalor() {
                   <SelectItem value="night_club">🎉 Baladas</SelectItem>
                   <SelectItem value="restaurant">🍽️ Restaurantes</SelectItem>
                   <SelectItem value="cafe">☕ Cafés</SelectItem>
+                  <SelectItem value="event">🎫 Eventos</SelectItem>
                 </SelectContent>
               </Select>
             </CardContent>
@@ -715,6 +726,24 @@ export default function MapaCalor() {
               </Select>
             </CardContent>
           </Card>
+          
+          {/* Status (Apenas abertos) */}
+          <Card className="bg-slate-700 border-slate-600">
+            <CardContent className="p-4">
+              <label className="text-sm text-gray-300 flex items-center gap-2 mb-2">
+                🟢 Status
+              </label>
+              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'all' | 'openOnly')}>
+                <SelectTrigger className="bg-slate-600 border-slate-500 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-700 border-slate-600">
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="openOnly">Apenas abertos</SelectItem>
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
         </div>
 
             {/* Legenda */}
@@ -735,6 +764,10 @@ export default function MapaCalor() {
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-full bg-red-500"></div>
                 <span>Muito Cheio</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded-full bg-black"></div>
+                <span>Fechado</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-full bg-blue-500"></div>
@@ -763,7 +796,8 @@ export default function MapaCalor() {
             {filteredPlaces.map(place => {
               const dayKey = selectedDay as keyof typeof place.popularTimes;
               const popularity = place.popularTimes?.[dayKey]?.[selectedHour] || 0;
-              const color = getColorByPopularity(popularity);
+              const isClosed = popularity === 0 || (place as any).openingHours?.[dayKey]?.closed === true;
+              const color = isClosed ? '#000000' : getColorByPopularity(popularity);
               
               return (
                 <Card 

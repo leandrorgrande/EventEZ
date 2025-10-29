@@ -124,10 +124,44 @@ app.post('/users/make-admin', async (req, res) => {
     }
 });
 // ============ EVENTS ============
+// Rota de DEBUG para listar TODOS os eventos sem filtro
+app.get('/events/debug', authenticate, async (req, res) => {
+    try {
+        console.log('[DEBUG] Iniciando busca de eventos no Firestore...');
+        const snapshot = await db.collection('events').get();
+        console.log('[DEBUG] Snapshot obtido. Vazio?', snapshot.empty);
+        console.log('[DEBUG] Número de documentos:', snapshot.size);
+        const events = snapshot.docs.map(doc => {
+            const data = doc.data();
+            console.log('[DEBUG] Documento ID:', doc.id);
+            console.log('[DEBUG] Dados completos:', JSON.stringify(data, null, 2));
+            return { id: doc.id, ...data };
+        });
+        console.log('[DEBUG] Total de eventos mapeados:', events.length);
+        res.json({
+            total: events.length,
+            snapshotEmpty: snapshot.empty,
+            snapshotSize: snapshot.size,
+            events: events,
+            collectionPath: 'events',
+            message: 'Debug completo - todos os eventos sem filtro'
+        });
+    }
+    catch (error) {
+        console.error('[DEBUG] ERRO:', error);
+        res.status(500).json({
+            error: error.message,
+            stack: error.stack,
+            message: "Erro ao buscar eventos (debug)"
+        });
+    }
+});
 app.get('/events', authenticate, async (req, res) => {
     try {
         const eventType = req.query.eventType;
-        const isActive = req.query.isActive === 'true';
+        // Corrigir: só considerar isActive quando o parâmetro existir na query
+        const hasIsActiveParam = typeof req.query.isActive !== 'undefined';
+        const isActive = hasIsActiveParam ? (req.query.isActive === 'true') : undefined;
         const approvalStatus = req.query.approvalStatus;
         const user = req.user;
         console.log('[API] GET /events - Query params:', { eventType, isActive, approvalStatus });
@@ -152,7 +186,7 @@ app.get('/events', authenticate, async (req, res) => {
         if (eventType) {
             events = events.filter((e) => e.eventType === eventType);
         }
-        if (isActive !== undefined) {
+        if (hasIsActiveParam) {
             events = events.filter((e) => e.isActive === isActive);
         }
         // Ordenar por data
@@ -193,8 +227,13 @@ app.get('/events', authenticate, async (req, res) => {
                 }
             }
         }
-        console.log('[API] Eventos retornados:', events.length);
-        res.json(events);
+        // Anexar contagem de participantes
+        const eventsWithCount = events.map((e) => ({
+            ...e,
+            attendeesCount: Array.isArray(e.attendeeIds) ? e.attendeeIds.length : 0
+        }));
+        console.log('[API] Eventos retornados:', eventsWithCount.length);
+        res.json(eventsWithCount);
     }
     catch (error) {
         console.error('[API] Erro ao buscar eventos:', error);
@@ -274,7 +313,7 @@ app.post('/events', authenticate, async (req, res) => {
 app.patch('/events/:eventId', authenticate, async (req, res) => {
     try {
         const { eventId } = req.params;
-        const { approvalStatus, ...otherData } = req.body;
+        const { approvalStatus, join, ...otherData } = req.body;
         const eventRef = db.collection('events').doc(eventId);
         const eventDoc = await eventRef.get();
         if (!eventDoc.exists) {
@@ -289,11 +328,23 @@ app.patch('/events/:eventId', authenticate, async (req, res) => {
             updateData.reviewedBy = req.user.uid;
             updateData.reviewedAt = admin.firestore.FieldValue.serverTimestamp();
         }
+        // Participação no evento (join=true adiciona, join=false remove)
+        if (typeof join === 'boolean') {
+            const userId = req.user.uid;
+            if (join) {
+                updateData.attendeeIds = admin.firestore.FieldValue.arrayUnion(userId);
+            }
+            else {
+                updateData.attendeeIds = admin.firestore.FieldValue.arrayRemove(userId);
+            }
+        }
         if (otherData && Object.keys(otherData).length > 0) {
             Object.assign(updateData, otherData);
         }
         await eventRef.update(updateData);
-        const updatedEvent = { id: eventDoc.id, ...eventDoc.data(), ...updateData };
+        const updatedSnap = await eventRef.get();
+        const updatedEvent = { id: updatedSnap.id, ...updatedSnap.data() };
+        updatedEvent.attendeesCount = Array.isArray(updatedEvent.attendeeIds) ? updatedEvent.attendeeIds.length : 0;
         res.json(updatedEvent);
     }
     catch (error) {
