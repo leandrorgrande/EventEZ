@@ -38,6 +38,7 @@ export default function Admin() {
   const [manualGoogleMapsUrl, setManualGoogleMapsUrl] = useState('');
   const [debugEventsData, setDebugEventsData] = useState<any>(null);
   const [isLoadingDebug, setIsLoadingDebug] = useState(false);
+  const [isUpdatingAll, setIsUpdatingAll] = useState(false);
 
   // Queries (enabled only if admin to prevent unnecessary calls)
   const { data: allUsers = [] } = useQuery({
@@ -621,6 +622,42 @@ export default function Admin() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Atualização de horários/avaliações via Places Details */}
+                <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="text-sm text-blue-200">
+                      <strong>Atualizar dados dos lugares:</strong> busca horários de funcionamento, status atual, nota e quantidade de avaliações pela Google Places API para todos os lugares já cadastrados.
+                    </div>
+                    <Button
+                      onClick={async () => {
+                        try {
+                          setIsUpdatingAll(true);
+                          const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+                          const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+                          const resp = await fetch(`${API_URL}/places/update-all-hours`, {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${token}` }
+                          });
+                          const data = await resp.json();
+                          if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
+                          toast({
+                            title: 'Lugares atualizados',
+                            description: `Atualizados: ${data.updated} / ${data.total} • Erros: ${data.errors}`
+                          });
+                        } catch (err: any) {
+                          toast({ title: 'Erro ao atualizar lugares', description: err.message || String(err), variant: 'destructive' });
+                        } finally {
+                          setIsUpdatingAll(false);
+                        }
+                      }}
+                      disabled={isUpdatingAll}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      {isUpdatingAll ? <><Clock className="h-4 w-4 mr-2 animate-spin" /> Atualizando...</> : 'Atualizar horários e avaliações'}
+                    </Button>
+                  </div>
+                </div>
+
                 <div className="bg-yellow-900/20 border border-yellow-800 rounded-lg p-4">
                   <p className="text-sm text-yellow-200">
                     <strong>⚠️ Atenção:</strong> Este processo busca horários de pico reais do Google Maps para os lugares cadastrados no Firestore.

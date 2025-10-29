@@ -10,7 +10,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import BottomNavigation from "@/components/BottomNavigation";
-import { Loader2, Calendar as CalendarIcon, Clock, Filter, MapPin, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, Calendar as CalendarIcon, Clock, Filter, MapPin, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -80,6 +80,7 @@ export default function MapaCalor() {
   const mapRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { isAdmin } = useAuth();
+  const [isUpdatingAll, setIsUpdatingAll] = useState(false);
 
   // Obter horário atual de Brasília
   const getBrasiliaTime = () => {
@@ -829,6 +830,36 @@ export default function MapaCalor() {
                 className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
               >
                 Buscar + na área
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    setIsUpdatingAll(true);
+                    const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+                    const token = await auth.currentUser?.getIdToken();
+                    const resp = await fetch(`${API_URL}/places/update-all-hours`, {
+                      method: 'POST',
+                      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+                    });
+                    const data = await resp.json();
+                    if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
+                    toast({
+                      title: 'Lugares atualizados',
+                      description: `Atualizados: ${data.updated} / ${data.total} • Erros: ${data.errors}`
+                    });
+                    refetch();
+                  } catch (err: any) {
+                    toast({ title: 'Erro ao atualizar lugares', description: err.message || String(err), variant: 'destructive' });
+                  } finally {
+                    setIsUpdatingAll(false);
+                  }
+                }}
+                disabled={isUpdatingAll}
+                className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
+              >
+                <RefreshCw className="h-4 w-4 mr-1" /> Atualizar horários/avaliações
               </Button>
             </div>
             )}

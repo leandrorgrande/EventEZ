@@ -942,11 +942,18 @@ app.post('/places/update-all-hours', authenticate, async (req, res) => {
                 if (placeDetails.currentOpeningHours) {
                     isOpenValue = placeDetails.currentOpeningHours.openNow || null;
                 }
+                // Enriquecer nota e contagem de avaliações
+                const rating = typeof placeDetails.rating === 'number' ? placeDetails.rating : (place.rating ?? null);
+                const userRatingCount = typeof placeDetails.userRatingCount === 'number' ? placeDetails.userRatingCount : (place.userRatingsTotal ?? 0);
                 // Atualizar no Firestore
                 const placeRef = db.collection('places').doc(place.id);
                 await placeRef.update({
                     openingHours,
                     isOpen: isOpenValue,
+                    rating,
+                    userRatingsTotal: userRatingCount,
+                    // opcional: atualizar nome se vier do details
+                    ...(placeDetails.displayName?.text ? { name: placeDetails.displayName.text } : {}),
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 });
                 updatedCount++;
