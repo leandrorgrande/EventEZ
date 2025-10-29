@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import { collection, getDocs, query as fsQuery, where } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,8 +42,9 @@ export default function Events() {
 
   const joinMutation = useMutation({
     mutationFn: async ({ eventId, willJoin }: { eventId: string; willJoin: boolean }) => {
+      console.log('[Events] Join toggle clicked', { eventId, willJoin });
       const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
-      const token = (await import('@/lib/firebase')).auth.currentUser ? await (await import('@/lib/firebase')).auth.currentUser?.getIdToken() : undefined;
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : undefined;
       const res = await fetch(`${API_URL}/events/${eventId}`, {
         method: 'PATCH',
         headers: {
@@ -52,20 +53,57 @@ export default function Events() {
         },
         body: JSON.stringify({ join: willJoin })
       });
-      if (!res.ok) throw new Error('Falha ao participar do evento');
-      return res.json();
+      console.log('[Events] Join response status', res.status);
+      if (!res.ok) {
+        const txt = await res.text();
+        console.error('[Events] Join error response', txt);
+        throw new Error('Falha ao participar do evento');
+      }
+      const json = await res.json();
+      console.log('[Events] Join success payload', json);
+      return json;
+    },
+    onMutate: async ({ eventId, willJoin }) => {
+      console.log('[Events] onMutate (optimistic)', { eventId, willJoin });
+      await queryClient.cancelQueries({ queryKey: ["firestore/events", { eventType: filterType }] });
+      const prev = queryClient.getQueryData<any[]>(["firestore/events", { eventType: filterType }]);
+      if (prev) {
+        const uid = auth.currentUser?.uid;
+        const next = prev.map((e: any) => {
+          if (e.id !== eventId) return e;
+          const attendeeIds = Array.isArray(e.attendeeIds) ? [...e.attendeeIds] : [];
+          const exists = uid ? attendeeIds.includes(uid) : false;
+          if (willJoin && uid && !exists) attendeeIds.push(uid);
+          if (!willJoin && uid && exists) attendeeIds.splice(attendeeIds.indexOf(uid), 1);
+          return {
+            ...e,
+            attendeeIds,
+            attendeesCount: attendeeIds.length,
+          };
+        });
+        queryClient.setQueryData(["firestore/events", { eventType: filterType }], next);
+      }
+      return { prev };
     },
     onSuccess: (_data, params) => {
       // Recarregar lista
       queryClient.invalidateQueries({ queryKey: ["firestore/events", { eventType: filterType }] });
       // Feedback
-      // Usando lazy import do toast para evitar ciclo
       import('@/hooks/use-toast').then(({ useToast }) => {
         try {
           const { toast } = useToast();
           toast({ title: params.willJoin ? 'Legal! 🎉' : 'Tudo certo 👍', description: params.willJoin ? 'Você vai participar deste evento.' : 'Você saiu do evento.' });
         } catch {}
       });
+    },
+    onError: (error, _vars, context) => {
+      console.error('[Events] Join mutate error', error);
+      if ((context as any)?.prev) {
+        queryClient.setQueryData(["firestore/events", { eventType: filterType }], (context as any).prev);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["firestore/events", { eventType: filterType }] });
     }
   });
 
@@ -156,15 +194,17 @@ export default function Events() {
         ) : (
           <div className="space-y-4">
             {filteredEvents.map((event: any) => {
-              const currentUser = (window as any).firebase?.auth?.currentUser || undefined;
-              const uid = currentUser?.uid;
+              const uid = auth.currentUser?.uid;
               const isGoing = Array.isArray(event.attendeeIds) ? event.attendeeIds.includes(uid) : false;
               return (
                 <EventCard 
                   key={event.id} 
                   event={event} 
                   isGoing={isGoing}
-                  onToggleJoin={(id, willJoin) => joinMutation.mutate({ eventId: id, willJoin })}
+                  onToggleJoin={(id, willJoin) => {
+                    console.log('[Events] ToggleJoin clicked', { id, willJoin });
+                    joinMutation.mutate({ eventId: id, willJoin });
+                  }}
                 />
               );
             })}
