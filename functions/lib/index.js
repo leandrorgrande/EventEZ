@@ -978,6 +978,114 @@ app.post('/places/update-all-hours', authenticate, async (req, res) => {
         res.status(500).json({ message: "Failed to update places" });
     }
 });
+// Atualizar horários/avaliações com logs em tempo real (SSE) e suporte a cancelamento
+app.post('/places/update-all-hours-stream', authenticate, async (req, res) => {
+    try {
+        // Configurar SSE
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+        const apiKey = "AIzaSyAv1QPfxhhYJ-a7czQhXPILtUI3Qz16UAg";
+        // Buscar todos os lugares
+        const placesSnapshot = await db.collection('places').get();
+        const places = placesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        send({ type: 'start', total: places.length });
+        let updatedCount = 0;
+        let errorCount = 0;
+        let cancelled = false;
+        req.on('close', () => { cancelled = true; });
+        const fieldMask = 'regularOpeningHours,currentOpeningHours,displayName,rating,userRatingCount';
+        for (let i = 0; i < places.length; i++) {
+            if (cancelled) {
+                send({ type: 'cancelled', updated: updatedCount, errors: errorCount, total: places.length });
+                res.end();
+                return;
+            }
+            const place = places[i];
+            const placeName = place.name;
+            const placeId = place.placeId;
+            try {
+                if (!placeId) {
+                    send({ type: 'progress', index: i + 1, total: places.length, placeName, status: 'skipped', reason: 'no_placeId' });
+                    continue;
+                }
+                const detailsUrl = `https://places.googleapis.com/v1/places/${placeId}`;
+                const detailsResponse = await fetch(detailsUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Goog-Api-Key': apiKey,
+                        'X-Goog-FieldMask': fieldMask
+                    }
+                });
+                if (!detailsResponse.ok) {
+                    const msg = `details ${detailsResponse.status}`;
+                    errorCount++;
+                    send({ type: 'progress', index: i + 1, total: places.length, placeName, status: 'error', reason: msg });
+                    continue;
+                }
+                const placeDetails = await detailsResponse.json();
+                const extractOpeningHoursLocal = (regularOpeningHours) => {
+                    if (!regularOpeningHours?.weekdayDescriptions)
+                        return null;
+                    const hours = { monday: null, tuesday: null, wednesday: null, thursday: null, friday: null, saturday: null, sunday: null };
+                    const dayMapping = { 'Segunda-feira': 'monday', 'Terça-feira': 'tuesday', 'Quarta-feira': 'wednesday', 'Quinta-feira': 'thursday', 'Sexta-feira': 'friday', 'Sábado': 'saturday', 'Domingo': 'sunday', 'Monday': 'monday', 'Tuesday': 'tuesday', 'Wednesday': 'wednesday', 'Thursday': 'thursday', 'Friday': 'friday', 'Saturday': 'saturday', 'Sunday': 'sunday' };
+                    regularOpeningHours.weekdayDescriptions.forEach((desc) => {
+                        const parts = desc.split(':');
+                        if (parts.length < 2)
+                            return;
+                        const dayName = parts[0].trim();
+                        const hoursText = parts.slice(1).join(':').trim();
+                        const dayKey = dayMapping[dayName];
+                        if (!dayKey)
+                            return;
+                        if (hoursText.toLowerCase().includes('fechado') || hoursText.toLowerCase().includes('closed')) {
+                            hours[dayKey] = { open: null, close: null, closed: true };
+                        }
+                        else {
+                            const m = hoursText.match(/(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})/);
+                            if (m) {
+                                hours[dayKey] = { open: `${m[1].padStart(2, '0')}:${m[2]}`, close: `${m[3].padStart(2, '0')}:${m[4]}`, closed: false };
+                            }
+                        }
+                    });
+                    return hours;
+                };
+                const openingHours = extractOpeningHoursLocal(placeDetails.regularOpeningHours);
+                const isOpenValue = placeDetails.currentOpeningHours ? (placeDetails.currentOpeningHours.openNow || null) : null;
+                const rating = typeof placeDetails.rating === 'number' ? placeDetails.rating : (place.rating ?? null);
+                const userRatingCount = typeof placeDetails.userRatingCount === 'number' ? placeDetails.userRatingCount : (place.userRatingsTotal ?? 0);
+                const placeRef = db.collection('places').doc(place.id);
+                await placeRef.update({
+                    openingHours,
+                    isOpen: isOpenValue,
+                    rating,
+                    userRatingsTotal: userRatingCount,
+                    ...(placeDetails.displayName?.text ? { name: placeDetails.displayName.text } : {}),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                updatedCount++;
+                send({ type: 'progress', index: i + 1, total: places.length, placeName, status: 'updated' });
+                await new Promise(resolve => setTimeout(resolve, 400));
+            }
+            catch (err) {
+                errorCount++;
+                send({ type: 'progress', index: i + 1, total: places.length, placeName, status: 'error', reason: err?.message || String(err) });
+            }
+        }
+        send({ type: 'end', updated: updatedCount, errors: errorCount, total: places.length });
+        res.end();
+    }
+    catch (error) {
+        console.error('[API] Erro geral (stream):', error);
+        try {
+            res.write(`data: ${JSON.stringify({ type: 'error', message: error?.message || 'unknown' })}\n\n`);
+        }
+        catch { }
+        res.end();
+    }
+});
 // Endpoint para atualizar googleMapsUri de um place
 app.patch('/places/:placeId/googlemaps', authenticate, async (req, res) => {
     try {

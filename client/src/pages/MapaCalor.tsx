@@ -103,7 +103,7 @@ export default function MapaCalor() {
   const [selectedDate, setSelectedDate] = useState<Date>(brasiliaTime); // Padrão: Data atual
   const [selectedHour, setSelectedHour] = useState<number>(brasiliaTime.getHours()); // Padrão: Hora atual
   const [selectedType, setSelectedType] = useState<string>('all'); // Filtro de tipo
-  const [statusFilter, setStatusFilter] = useState<'all' | 'openOnly'>('openOnly'); // Filtro de status (default: Apenas abertos)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'openOnly' | 'closed' | 'tranquilo' | 'moderado' | 'movimentado' | 'muitoCheio'>('openOnly'); // Filtro de status (default: Apenas abertos)
   const [minRating, setMinRating] = useState<number>(0); // Filtro de avaliação mínima
   const [filtersExpanded, setFiltersExpanded] = useState<boolean>(false); // Controle de expansão dos filtros - padrão fechado
 
@@ -226,17 +226,24 @@ export default function MapaCalor() {
           if (minRating > 0 && (!place.rating || place.rating < minRating)) {
             return false;
           }
-          // Filtro de status (apenas abertos)
+          // Cálculo de status para filtragem por legenda
+          const dayKey: any = selectedDay;
+          const dayHours = (place as any).openingHours?.[dayKey];
+          const isClosedAllDay = dayHours?.closed === true;
+          const rawPopularity = (place as any).popularTimes?.[dayKey]?.[selectedHour];
+          const popularity = rawPopularity !== undefined ? rawPopularity : 0;
           if (statusFilter === 'openOnly') {
-            const dayKey: any = selectedDay;
-            // Verificar primeiro se está fechado pelas openingHours
-            const isClosedByHours = (place as any).openingHours?.[dayKey]?.closed === true;
-            // Obter popularidade (0 se não existir ou se estiver fechado)
-            const rawPopularity = (place as any).popularTimes?.[dayKey]?.[selectedHour];
-            const popularity = isClosedByHours ? 0 : (rawPopularity !== undefined ? rawPopularity : 0);
-            // Está fechado se popularidade é 0 ou se explicitamente marcado como closed
-            const isClosed = popularity === 0 || isClosedByHours;
-            if (isClosed) return false;
+            if (isClosedAllDay) return false;
+          } else if (statusFilter === 'closed') {
+            if (!isClosedAllDay) return false;
+          } else if (statusFilter === 'tranquilo') {
+            if (isClosedAllDay || popularity >= 40) return false;
+          } else if (statusFilter === 'moderado') {
+            if (isClosedAllDay || popularity < 40 || popularity >= 60) return false;
+          } else if (statusFilter === 'movimentado') {
+            if (isClosedAllDay || popularity < 60 || popularity >= 80) return false;
+          } else if (statusFilter === 'muitoCheio') {
+            if (isClosedAllDay || popularity < 80) return false;
           }
           return true;
         })
@@ -1042,13 +1049,18 @@ export default function MapaCalor() {
               <label className="text-sm text-gray-300 flex items-center gap-2 mb-2">
                 🟢 Status
               </label>
-              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'all' | 'openOnly')}>
+              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
                 <SelectTrigger className="bg-slate-600 border-slate-500 text-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-700 border-slate-600">
                   <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="openOnly">Apenas abertos</SelectItem>
+                  <SelectItem value="tranquilo">Tranquilo</SelectItem>
+                  <SelectItem value="moderado">Moderado</SelectItem>
+                  <SelectItem value="movimentado">Movimentado</SelectItem>
+                  <SelectItem value="muitoCheio">Muito Cheio</SelectItem>
+                  <SelectItem value="closed">Fechado</SelectItem>
                 </SelectContent>
               </Select>
             </CardContent>

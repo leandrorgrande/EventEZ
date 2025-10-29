@@ -923,6 +923,135 @@ app.put('/places/:placeId/popular-times', async (req: express.Request, res: expr
   }
 });
 
+// Import popular times (one-time) using external provider (SerpApi)
+const normalizePopularTimes = (raw: any): any | null => {
+  if (!raw) return null;
+  const dayKeys = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+  const out: any = {
+    monday: Array(24).fill(0),
+    tuesday: Array(24).fill(0),
+    wednesday: Array(24).fill(0),
+    thursday: Array(24).fill(0),
+    friday: Array(24).fill(0),
+    saturday: Array(24).fill(0),
+    sunday: Array(24).fill(0)
+  };
+
+  const mapDayName = (name: string): string | null => {
+    if (!name) return null;
+    const n = name.toLowerCase();
+    if (n.startsWith('mon')) return 'monday';
+    if (n.startsWith('tue')) return 'tuesday';
+    if (n.startsWith('wed')) return 'wednesday';
+    if (n.startsWith('thu')) return 'thursday';
+    if (n.startsWith('fri')) return 'friday';
+    if (n.startsWith('sat')) return 'saturday';
+    if (n.startsWith('sun')) return 'sunday';
+    if (n.startsWith('seg')) return 'monday';
+    if (n.startsWith('ter')) return 'tuesday';
+    if (n.startsWith('qua')) return 'wednesday';
+    if (n.startsWith('qui')) return 'thursday';
+    if (n.startsWith('sex')) return 'friday';
+    if (n.startsWith('sáb') || n.startsWith('sab')) return 'saturday';
+    if (n.startsWith('dom')) return 'sunday';
+    return null;
+  };
+
+  const setHour = (day: string, hour: number, value: number) => {
+    const h = Math.max(0, Math.min(23, Math.floor(hour)));
+    const v = Math.max(0, Math.min(100, Math.floor(value || 0)));
+    out[day][h] = v;
+  };
+
+  const arr = raw.popular_times || raw.populartimes || raw;
+  if (Array.isArray(arr)) {
+    arr.forEach((dayObj: any) => {
+      const key = mapDayName(dayObj?.name || dayObj?.day || dayObj?.weekday) as string;
+      if (!key || !dayKeys.includes(key)) return;
+      const data = dayObj?.data || dayObj?.hours || dayObj?.popularity || [];
+      if (Array.isArray(data)) {
+        data.forEach((entry: any, idx: number) => {
+          if (typeof entry === 'number') { setHour(key, idx, entry); return; }
+          const hour = typeof entry?.hour === 'number' ? entry.hour : (typeof entry?.time === 'string' ? (() => {
+            const m = entry.time.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
+            if (!m) return idx; let h = parseInt(m[1], 10); const ampm = (m[3] || '').toUpperCase();
+            if (ampm === 'PM' && h !== 12) h += 12; if (ampm === 'AM' && h === 12) h = 0; return h; })() : idx);
+          const value = typeof entry?.busy_percent === 'number' ? entry.busy_percent : (typeof entry?.value === 'number' ? entry.value : (typeof entry?.percentage === 'number' ? entry.percentage : 0));
+          setHour(key, hour as number, value as number);
+        });
+      }
+    });
+    return out;
+  }
+  return null;
+};
+
+const fetchPopularTimesFromSerpApi = async (name: string, address?: string): Promise<any | null> => {
+  try {
+    const axios = require('axios');
+    const apiKey = process.env.SERPAPI_API_KEY;
+    if (!apiKey) return null;
+    const q = address ? `${name} ${address}` : name;
+    const searchUrl = 'https://serpapi.com/search.json';
+    const searchParams = { engine: 'google_maps', q, hl: 'pt-BR', gl: 'br', type: 'search', api_key: apiKey } as any;
+    const searchRes = await axios.get(searchUrl, { params: searchParams, timeout: 20000 });
+    const first = searchRes?.data?.local_results?.[0];
+    if (!first) {
+      const normalized = normalizePopularTimes(searchRes?.data?.popular_times);
+      if (normalized) return normalized;
+      return null;
+    }
+    const dataId = first?.data_id;
+    let detail = null;
+    if (dataId) {
+      const detailUrl = 'https://serpapi.com/search.json';
+      const detailParams = { engine: 'google_maps_place', data_id: dataId, hl: 'pt-BR', gl: 'br', api_key: apiKey } as any;
+      const detailRes = await axios.get(detailUrl, { params: detailParams, timeout: 20000 });
+      detail = detailRes?.data;
+    }
+    const normalized = normalizePopularTimes(detail?.popular_times || first?.popular_times || detail);
+    return normalized;
+  } catch (e: any) {
+    console.error('[Import] SerpApi error:', e?.response?.data || e?.message || e);
+    return null;
+  }
+};
+
+app.post('/places/popular-times/import-once', authenticate, async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    const limit = Math.min(parseInt((req.body as any)?.limit || '1000', 10) || 1000, 1000);
+    console.log('[Import] Iniciando import popularTimes (one-time)', { limit });
+
+    const snap = await db.collection('places').get();
+    let places = snap.docs.map(d => ({ docRef: d.ref, id: d.id, ...(d.data() as any) }));
+    places = places.filter(p => !p.popularTimes).slice(0, limit);
+
+    let updated = 0; let failed = 0; const results: any[] = [];
+
+    for (const place of places) {
+      try {
+        let popularTimes: any | null = null;
+        popularTimes = await fetchPopularTimesFromSerpApi(place.name || place.displayName?.text || '', place.formattedAddress);
+        if (!popularTimes && place.googleMapsUri) {
+          popularTimes = await scrapePopularTimes(place.name || place.displayName?.text || '', place.googleMapsUri);
+        }
+        if (popularTimes) {
+          await place.docRef.update({ popularTimes, dataSource: popularTimes ? 'serpapi' : 'scraped', updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+          updated++; results.push({ id: place.id, ok: true });
+        } else { failed++; results.push({ id: place.id, ok: false }); }
+      } catch (err: any) {
+        console.error('[Import] erro por lugar:', err?.message || err);
+        failed++; results.push({ id: place.id, ok: false, error: err?.message });
+      }
+    }
+
+    res.json({ total: places.length, updated, failed, provider: 'serpapi', results });
+  } catch (error: any) {
+    console.error('[Import] erro geral:', error);
+    res.status(500).json({ message: 'Failed to import popular times', error: error?.message });
+  }
+});
+
 // Atualizar horários de todos os lugares existentes
 app.post('/places/update-all-hours', authenticate, async (req: express.Request, res: express.Response): Promise<void> => {
   try {
