@@ -271,17 +271,18 @@ export default function MapaCalor() {
   };
 
   // Calcular próximo horário de abertura se estiver fechado
-  const getNextOpeningTime = (place: Place, currentDay: string, currentHour: number): string | null => {
+  const getNextOpeningTime = (place: Place, currentDay: string, currentHour: number): { time: string; isToday: boolean } | null => {
     if (!place.openingHours || !place.openingHours[currentDay]) return null;
     
     const dayHours = place.openingHours[currentDay];
-    if (!dayHours.closed && dayHours.open) {
+    // Verifica se tem horário de abertura (mesmo que esteja fechado agora)
+    if (dayHours.open && !dayHours.closed) {
       const openTime = convertTo24h(dayHours.open);
       const openHour = parseInt(openTime.split(':')[0]);
       
-      // Se ainda vai abrir hoje
+      // Se ainda vai abrir hoje (horário futuro)
       if (openHour > currentHour) {
-        return openTime;
+        return { time: openTime, isToday: true };
       }
     }
     
@@ -297,7 +298,7 @@ export default function MapaCalor() {
       if (nextDayHours && !nextDayHours.closed && nextDayHours.open) {
         const openTime = convertTo24h(nextDayHours.open);
         const dayLabel = getDayLabel(nextDay);
-        return `${dayLabel} às ${openTime}`;
+        return { time: `${dayLabel} às ${openTime}`, isToday: false };
       }
     }
     
@@ -431,12 +432,24 @@ export default function MapaCalor() {
         const bgColor = isClosed ? '#000000' : getColorByPopularity(popularity);
         
         // Calcular próximo horário de abertura se estiver fechado
-        let nextOpeningInfo = '';
+        let timeInfo = '';
         if (isClosed) {
           const nextOpening = getNextOpeningTime(place, selectedDay, selectedHour);
           if (nextOpening) {
-            nextOpeningInfo = `<p style="margin: 8px 0 0 0; color: #10b981; font-size: 12px; font-weight: 600;">🕐 Abre: ${nextOpening}</p>`;
+            if (nextOpening.isToday) {
+              // Se abre hoje, mostra apenas o horário
+              timeInfo = `<p style="margin: 0; color: #10b981; font-size: 13px; font-weight: 600;">🕐 Abre às ${nextOpening.time}</p>`;
+            } else {
+              // Se abre em outro dia, mostra dia e horário
+              timeInfo = `<p style="margin: 0; color: #10b981; font-size: 13px; font-weight: 600;">🕐 Abre ${nextOpening.time}</p>`;
+            }
+          } else {
+            // Se não tem horário de abertura, mostra data/hora atual
+            timeInfo = `<p style="margin: 0; color: #6b7280; font-size: 13px;">📅 ${getDayLabel(selectedDay)}<br/>🕐 ${selectedHour.toString().padStart(2, '0')}:00</p>`;
           }
+        } else {
+          // Se está aberto, mostra data/hora atual
+          timeInfo = `<p style="margin: 0; color: #6b7280; font-size: 13px;">📅 ${getDayLabel(selectedDay)}<br/>🕐 ${selectedHour.toString().padStart(2, '0')}:00</p>`;
         }
         
         const infoWindow = new google.maps.InfoWindow({
@@ -446,11 +459,7 @@ export default function MapaCalor() {
               <div style="background: ${bgColor}; color: white; padding: 6px 10px; border-radius: 4px; margin-bottom: 8px; text-align: center;">
                 <strong style="font-size: 16px;">${statusLabel}</strong>
               </div>
-              <p style="margin: 0; color: #6b7280; font-size: 13px;">
-                📅 ${getDayLabel(selectedDay)}<br/>
-                🕐 ${selectedHour.toString().padStart(2, '0')}:00
-              </p>
-              ${nextOpeningInfo}
+              ${timeInfo}
               ${place.formattedAddress ? `
                 <p style="margin: 8px 0 0 0; color: #9ca3af; font-size: 12px;">
                   📍 ${place.formattedAddress}
@@ -1130,18 +1139,24 @@ export default function MapaCalor() {
                           const closeTime24h = convertTo24h(dayHours.close || '');
                           
                           // Calcular próximo horário de abertura se estiver fechado
-                          let nextOpeningText = '';
+                          let openingInfo = '';
                           if (isClosed) {
                             const nextOpening = getNextOpeningTime(place, dayKey, selectedHour);
                             if (nextOpening) {
-                              nextOpeningText = ` (Abre: ${nextOpening})`;
+                              if (nextOpening.isToday) {
+                                openingInfo = ` (Abre às ${nextOpening.time})`;
+                              } else {
+                                openingInfo = ` (Abre ${nextOpening.time})`;
+                              }
                             }
                           }
                           
                           return (
                             <p className="text-[10px] md:text-xs mt-1">
                               {dayHours.closed ? (
-                                <span className="text-red-400">🔒 Fechado o dia todo{nextOpeningText && <span className="text-green-400">{nextOpeningText}</span>}</span>
+                                <span className="text-red-400">🔒 Fechado o dia todo{openingInfo && <span className="text-green-400">{openingInfo}</span>}</span>
+                              ) : isClosed ? (
+                                <span className="text-red-400">🔒 Fechado{openingInfo && <span className="text-green-400">{openingInfo}</span>}</span>
                               ) : (
                                 <span className="text-green-400">
                                   🕐 {openTime24h} - {closeTime24h}
