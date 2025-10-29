@@ -615,7 +615,7 @@ export default function MapaCalor() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-slate-900">
+    <div className="min-h-screen flex flex-col bg-slate-900 overflow-hidden">
       {/* Header com Controles */}
       <div className="bg-slate-800 border-b border-slate-700 p-4 space-y-4">
         {/* Título e Botão de Colapsar */}
@@ -866,15 +866,15 @@ export default function MapaCalor() {
 
       </div>
       
-      {/* Mapa - Altura otimizada para mobile com espaço para navegação fixa */}
-      <div ref={mapRef} className="flex-1 w-full min-h-[60vh] md:min-h-0 mb-16" />
+      {/* Mapa - Altura fixa em mobile para permitir visualização da lista */}
+      <div ref={mapRef} className="w-full h-[50vh] md:h-auto md:flex-1 md:min-h-0 mb-16" />
 
       {/* Navegação Fixa - Sempre visível na parte inferior */}
       <BottomNavigation currentPage="map" onNavigate={() => {}} />
 
       {/* Lista de Lugares e Eventos - Abaixo do mapa */}
       {((filteredPlaces && filteredPlaces.length > 0) || (events && events.length > 0)) && (
-        <div className="bg-slate-800 p-3 md:p-4 border-t border-slate-700 max-h-[35vh] md:max-h-[300px] overflow-y-auto">
+        <div className="bg-slate-800 p-3 md:p-4 border-t border-slate-700 max-h-[40vh] md:max-h-[300px] overflow-y-auto relative z-10">
           <h2 className="text-base md:text-lg font-bold text-white mb-2 md:mb-3 flex items-center gap-2">
             <MapPin className="h-4 w-4 md:h-5 md:w-5 text-blue-500" />
             Lugares e Eventos ({(filteredPlaces?.length || 0) + (events?.filter((ev) => {
@@ -954,6 +954,15 @@ export default function MapaCalor() {
                               </span>
                             )}
                           </div>
+                          
+                          {/* Localização */}
+                          {(ev.location?.name || (ev.location as any)?.address) && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <span className="text-xs md:text-sm text-gray-400">
+                                📍 {ev.location?.name || (ev.location as any)?.address || ''}
+                              </span>
+                            </div>
+                          )}
                           
                           {/* Contagem de participantes */}
                           <div className="flex items-center gap-1 mt-1">
