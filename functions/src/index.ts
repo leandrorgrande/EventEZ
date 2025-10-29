@@ -386,7 +386,7 @@ app.get('/places', async (req: express.Request, res: express.Response) => {
 
 app.post('/places/search-santos', authenticate, async (req: express.Request, res: express.Response): Promise<void> => {
   try {
-    const { locationType = 'bar' } = req.body;
+    const { locationType = 'bar', center, radiusMeters, rank = 'DISTANCE' } = req.body;
     
     // Use hardcoded API key (temporary for debugging)
     const apiKey = "AIzaSyAv1QPfxhhYJ-a7czQhXPILtUI3Qz16UAg";
@@ -399,29 +399,46 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
       return;
     }
 
-    // Santos coordinates
+    // Santos coordinates (defaults), podem ser sobrescritos por center
     const santosLat = -23.9608;
     const santosLng = -46.3332;
 
-    const typeMapping: Record<string, string> = {
-      bars: 'bar',
-      clubs: 'night_club',
-      shows: 'movie_theater',
-      food: 'restaurant',
-      fairs: 'amusement_park'
+    // Tipos ampliados por categoria
+    // Mapeamento sem sobreposição entre categorias
+    const typeMapping: Record<string, string[]> = {
+      bars: ['bar'],
+      clubs: ['night_club'],
+      shows: ['movie_theater'],
+      food: ['restaurant'],
+      cafe: ['cafe', 'bakery'],
+      fairs: ['amusement_park']
     };
+    const includedTypes = typeMapping[locationType] || ['bar'];
 
-    const placeType = typeMapping[locationType] || 'bar';
+    // Palavras‑chave de fallback por categoria para SearchText (pt-BR)
+    const textQueryMapping: Record<string, string[]> = {
+      bars: ['bar', 'pub', 'choperia'],
+      clubs: ['balada', 'boate', 'night club'],
+      shows: ['cinema'],
+      food: ['restaurante'],
+      cafe: ['café', 'padaria', 'coffee shop'],
+      fairs: ['parque de diversões']
+    };
+    const textQueries = textQueryMapping[locationType] || [];
 
     const url = 'https://places.googleapis.com/v1/places:searchNearby';
     
     const requestBody: any = {
-      includedTypes: [placeType],
+      includedTypes,
       maxResultCount: 20, // Google limita a 20 por requisição
+      rankPreference: (rank === 'DISTANCE' || rank === 'POPULARITY') ? rank : 'DISTANCE',
       locationRestriction: {
         circle: {
-          center: { latitude: santosLat, longitude: santosLng },
-          radius: 15000 // Aumentado para 15km (cobrir toda Santos)
+          center: { 
+            latitude: typeof center?.latitude === 'number' ? center.latitude : santosLat, 
+            longitude: typeof center?.longitude === 'number' ? center.longitude : santosLng 
+          },
+          radius: typeof radiusMeters === 'number' ? radiusMeters : 15000 // 15km
         }
       }
     };
@@ -434,7 +451,7 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
       headers: {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.googleMapsUri,places.regularOpeningHours,places.currentOpeningHours,places.primaryType'
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.googleMapsUri,places.regularOpeningHours,places.currentOpeningHours,places.primaryType,places.types,places.businessStatus'
       },
       body: JSON.stringify(requestBody)
     });
@@ -456,8 +473,84 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
     const savedPlaces = [];
     let newPlacesCount = 0;
     let existingPlacesCount = 0;
-    
-    console.log('[API] Lugares recebidos da Google:', data.places?.length || 0);
+    const allPlaces: any[] = [...(data.places || [])];
+    console.log('[API] Lugares recebidos da Google (Nearby):', allPlaces.length);
+
+    // Fallback: SearchText por palavras‑chave para cobrir locais não retornados pelo ranking
+    if (textQueries.length > 0) {
+      const textUrl = 'https://places.googleapis.com/v1/places:searchText';
+      const fieldMask = 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.googleMapsUri,places.regularOpeningHours,places.currentOpeningHours,places.primaryType,places.types,places.businessStatus';
+      for (const q of textQueries) {
+        try {
+          const textBody: any = {
+            textQuery: q,
+            languageCode: 'pt-BR',
+            regionCode: 'BR',
+            maxResultCount: 20,
+            locationBias: {
+              circle: {
+                center: {
+                  latitude: requestBody.locationRestriction.circle.center.latitude,
+                  longitude: requestBody.locationRestriction.circle.center.longitude
+                },
+                radius: requestBody.locationRestriction.circle.radius
+              }
+            }
+          };
+          const textResp = await fetch(textUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Goog-Api-Key': apiKey,
+              'X-Goog-FieldMask': fieldMask
+            },
+            body: JSON.stringify(textBody)
+          });
+          if (!textResp.ok) {
+            const errText = await textResp.text();
+            console.warn('[API] SearchText falhou para query', q, errText);
+            continue;
+          }
+          const textData = await textResp.json();
+          let pagePlaces = textData.places || [];
+          let totalAdded = 0;
+          let page = 1;
+          // Dedup primeira página
+          let pageNew = pagePlaces.filter((p: any) => !allPlaces.some((e: any) => e.id === p.id));
+          allPlaces.push(...pageNew);
+          totalAdded += pageNew.length;
+          // Paginação do SearchText (sem incluir nextPageToken no FieldMask; token é top-level)
+          let pt = textData.nextPageToken;
+          while (pt && page < 3) {
+            await new Promise(res => setTimeout(res, 1600));
+            const pageResp = await fetch(textUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Goog-Api-Key': apiKey,
+                'X-Goog-FieldMask': fieldMask
+              },
+              body: JSON.stringify({ pageToken: pt })
+            });
+            if (!pageResp.ok) {
+              const errT = await pageResp.text();
+              console.warn('[API] SearchText paginação falhou:', errT);
+              break;
+            }
+            const pageData = await pageResp.json();
+            pagePlaces = pageData.places || [];
+            pageNew = pagePlaces.filter((p: any) => !allPlaces.some((e: any) => e.id === p.id));
+            allPlaces.push(...pageNew);
+            totalAdded += pageNew.length;
+            pt = pageData.nextPageToken;
+            page++;
+          }
+          console.log(`[API] SearchText("${q}") adicionou ${totalAdded} novos lugares após dedupe (páginas: ${page}).`);
+        } catch (err) {
+          console.warn('[API] Erro no SearchText para query', q, err);
+        }
+      }
+    }
 
     // Função para extrair horários de funcionamento
     const extractOpeningHours = (regularOpeningHours: any) => {
@@ -611,7 +704,7 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
       return popularTimes;
     };
 
-    for (const place of data.places || []) {
+    for (const place of allPlaces || []) {
       const placeType = place.primaryType || 'bar';
       
       console.log('[API] Processando lugar:', place.displayName?.text);
@@ -636,6 +729,7 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
       // Gerar popularTimes baseado nos horários de funcionamento
       const popularTimes = generateDefaultPopularTimes(placeType, openingHours);
       
+      const mergedTypes = Array.from(new Set([...(place.types || []), place.primaryType].filter(Boolean)));
       const placeInfo = {
         placeId: place.id,
         name: place.displayName?.text || 'Unknown',
@@ -646,7 +740,8 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
         userRatingsTotal: place.userRatingCount || 0,
         googleMapsUri: place.googleMapsUri || null, // ⭐ URL DO GOOGLE MAPS PARA SCRAPING
         isOpen: isOpenValue, // ⭐ STATUS ATUAL (aberto/fechado AGORA)
-        types: place.primaryType ? [place.primaryType] : [],
+        types: mergedTypes,
+        businessStatus: place.businessStatus || null,
         openingHours: openingHours, // ⭐ HORÁRIOS DE FUNCIONAMENTO POR DIA
         popularTimes: popularTimes, // ⭐ POPULAR TIMES AJUSTADOS
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -683,14 +778,14 @@ app.post('/places/search-santos', authenticate, async (req: express.Request, res
     
     console.log('[API] Novos lugares:', newPlacesCount);
     console.log('[API] Lugares já existentes:', existingPlacesCount);
-    console.log('[API] Total processado:', data.places?.length || 0);
+    console.log('[API] Total processado:', allPlaces.length || 0);
 
     res.json({ 
       places: savedPlaces,
       count: savedPlaces.length,
       newPlaces: newPlacesCount,
       existingPlaces: existingPlacesCount,
-      totalProcessed: data.places?.length || 0,
+      totalProcessed: allPlaces.length || 0,
       message: newPlacesCount > 0 
         ? `${newPlacesCount} novos lugares adicionados! (${existingPlacesCount} já existiam)`
         : `Nenhum lugar novo encontrado. Todos os ${existingPlacesCount} já estavam no banco.`,

@@ -139,18 +139,25 @@ export default function MapaCalor() {
 
   // Buscar lugares automaticamente se estiver vazio
   const searchPlacesMutation = useMutation({
-    mutationFn: async (type: string) => {
+    mutationFn: async (payload: any) => {
+      const type = typeof payload === 'string' ? payload : payload?.locationType;
       console.log('[MapaCalor] Buscando lugares do tipo:', type);
       
       try {
         const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+        const body: any = { locationType: type };
+        if (typeof payload === 'object' && payload?.center) {
+          body.center = payload.center;
+          if (payload.radiusMeters) body.radiusMeters = payload.radiusMeters;
+          if (payload.rank) body.rank = payload.rank;
+        }
         const response = await fetch(`${API_URL}/places/search-santos`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${await auth.currentUser?.getIdToken()}`
           },
-          body: JSON.stringify({ locationType: type, maxResults: 50 })
+          body: JSON.stringify(body)
         });
         
         console.log('[MapaCalor] Response status:', response.status);
@@ -431,25 +438,27 @@ export default function MapaCalor() {
         const statusLabel = isClosed ? '🔒 Fechado' : `Movimento ${getPopularityLabel(popularity)}`;
         const bgColor = isClosed ? '#000000' : getColorByPopularity(popularity);
         
-        // Calcular próximo horário de abertura se estiver fechado
+        // Calcular mensagem de horário condizente com status
         let timeInfo = '';
         if (isClosed) {
           const nextOpening = getNextOpeningTime(place, selectedDay, selectedHour);
           if (nextOpening) {
             if (nextOpening.isToday) {
-              // Se abre hoje, mostra apenas o horário
               timeInfo = `<p style="margin: 0; color: #10b981; font-size: 13px; font-weight: 600;">🕐 Abre às ${nextOpening.time}</p>`;
             } else {
-              // Se abre em outro dia, mostra dia e horário
               timeInfo = `<p style="margin: 0; color: #10b981; font-size: 13px; font-weight: 600;">🕐 Abre ${nextOpening.time}</p>`;
             }
           } else {
-            // Se não tem horário de abertura, mostra data/hora atual
             timeInfo = `<p style="margin: 0; color: #6b7280; font-size: 13px;">📅 ${getDayLabel(selectedDay)}<br/>🕐 ${selectedHour.toString().padStart(2, '0')}:00</p>`;
           }
         } else {
-          // Se está aberto, mostra data/hora atual
-          timeInfo = `<p style="margin: 0; color: #6b7280; font-size: 13px;">📅 ${getDayLabel(selectedDay)}<br/>🕐 ${selectedHour.toString().padStart(2, '0')}:00</p>`;
+          const dayHours = (place as any).openingHours?.[selectedDay as any];
+          const closeTime24h = dayHours?.close ? convertTo24h(dayHours.close) : null;
+          if (closeTime24h) {
+            timeInfo = `<p style="margin: 0; color: #10b981; font-size: 13px; font-weight: 600;">🟢 Aberto até ${closeTime24h}</p>`;
+          } else {
+            timeInfo = `<p style="margin: 0; color: #6b7280; font-size: 13px;">📅 ${getDayLabel(selectedDay)}<br/>🕐 ${selectedHour.toString().padStart(2, '0')}:00</p>`;
+          }
         }
         
         const infoWindow = new google.maps.InfoWindow({
@@ -771,6 +780,52 @@ export default function MapaCalor() {
                 className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
               >
                 + Restaurantes
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => searchPlacesMutation.mutate('cafe')}
+                disabled={searchPlacesMutation.isPending}
+                className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
+              >
+                + Cafés/Padarias
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  if (!map) return;
+                  const center = map.getCenter?.();
+                  if (!center) return;
+                  const lat = center.lat();
+                  const lng = center.lng();
+                  // Mapear o filtro atual para o backend
+                  const typeMap: Record<string, string[]> = {
+                    all: ['bars','clubs','food','cafe'],
+                    bar: ['bars'],
+                    night_club: ['clubs'],
+                    restaurant: ['food'],
+                    cafe: ['cafe'],
+                    event: []
+                  };
+                  const targets = typeMap[selectedType] || ['bars'];
+                  for (const t of targets) {
+                    try {
+                      await searchPlacesMutation.mutateAsync({
+                        locationType: t,
+                        center: { latitude: lat, longitude: lng },
+                        radiusMeters: 900,
+                        rank: 'DISTANCE'
+                      } as any);
+                    } catch (e) {
+                      console.error('[MapaCalor] Buscar + na área erro:', e);
+                    }
+                  }
+                }}
+                disabled={searchPlacesMutation.isPending}
+                className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
+              >
+                Buscar + na área
               </Button>
             </div>
 
@@ -1159,7 +1214,7 @@ export default function MapaCalor() {
                                 <span className="text-red-400">🔒 Fechado{openingInfo && <span className="text-green-400">{openingInfo}</span>}</span>
                               ) : (
                                 <span className="text-green-400">
-                                  🕐 {openTime24h} - {closeTime24h}
+                                  🟢 Aberto até {closeTime24h || '—'}
                                 </span>
                               )}
                             </p>

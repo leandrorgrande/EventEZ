@@ -23,8 +23,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
-import { isUnauthorizedError } from "@/lib/authUtils";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 const editProfileSchema = z.object({
   firstName: z.string().optional(),
@@ -82,51 +82,40 @@ export default function EditProfileModal({ open, onOpenChange, user }: EditProfi
     mutationFn: async (data: any) => {
       let profileImageUrl = user?.profileImageUrl;
 
-      // Upload new profile image if provided
+      // Upload nova imagem se enviada
       if (data.profileImage) {
         profileImageUrl = await uploadProfileImage(data.profileImage);
       }
 
-      // Update user profile
+      // Atualizar perfil no Firestore (merge)
       const updateData = {
-        firstName: data.firstName,
-        lastName: data.lastName,
-        phone: data.phone,
-        bio: data.bio,
+        firstName: data.firstName || "",
+        lastName: data.lastName || "",
+        phone: data.phone || "",
+        bio: data.bio || "",
         profileImageUrl,
+        updatedAt: serverTimestamp(),
       };
 
-      const response = await apiRequest("PATCH", `/api/users/${user.id}`, updateData);
-      return response.json();
+      await setDoc(doc(db, "users", user.id), updateData, { merge: true });
+      return updateData;
     },
     onSuccess: () => {
       toast({
-        title: "Profile Updated",
-        description: "Your profile has been updated successfully!",
+        title: "Perfil atualizado",
+        description: "Suas informações foram salvas com sucesso!",
       });
       
-      // Invalidate user data
+      // Opcional: invalidar consultas se necessário (mantido para compatibilidade)
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       
       // Close modal
       onOpenChange(false);
     },
-    onError: (error: Error) => {
-      if (isUnauthorizedError(error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
-        return;
-      }
-      
+    onError: () => {
       toast({
-        title: "Error",
-        description: "Failed to update profile. Please try again.",
+        title: "Erro",
+        description: "Falha ao atualizar perfil. Tente novamente.",
         variant: "destructive",
       });
     },
@@ -140,9 +129,9 @@ export default function EditProfileModal({ open, onOpenChange, user }: EditProfi
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-md">
         <DialogHeader>
-          <DialogTitle data-testid="text-edit-profile-title">Edit Profile</DialogTitle>
+          <DialogTitle data-testid="text-edit-profile-title">Editar Perfil</DialogTitle>
           <DialogDescription className="text-gray-400">
-            Update your personal information and profile picture
+            Atualize suas informações pessoais e foto de perfil
           </DialogDescription>
         </DialogHeader>
 
@@ -154,7 +143,7 @@ export default function EditProfileModal({ open, onOpenChange, user }: EditProfi
               name="profileImage"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-gray-300">Profile Picture</FormLabel>
+                  <FormLabel className="text-gray-300">Foto do Perfil</FormLabel>
                   <FormControl>
                     <div className="flex items-center space-x-4">
                       <Avatar className="h-16 w-16">
@@ -184,7 +173,7 @@ export default function EditProfileModal({ open, onOpenChange, user }: EditProfi
                             className="text-xs text-red-400 hover:text-red-300 mt-1"
                             data-testid="button-remove-profile-image"
                           >
-                            Remove new image
+                            Remover nova imagem
                           </button>
                         )}
                       </div>
@@ -202,10 +191,10 @@ export default function EditProfileModal({ open, onOpenChange, user }: EditProfi
                 name="firstName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-gray-300">First Name</FormLabel>
+                    <FormLabel className="text-gray-300">Nome</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="First name"
+                        placeholder="Nome"
                         className="bg-slate-700 border-slate-600 text-white placeholder-gray-400"
                         data-testid="input-first-name"
                         {...field}
@@ -221,10 +210,10 @@ export default function EditProfileModal({ open, onOpenChange, user }: EditProfi
                 name="lastName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-gray-300">Last Name</FormLabel>
+                    <FormLabel className="text-gray-300">Sobrenome</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Last name"
+                        placeholder="Sobrenome"
                         className="bg-slate-700 border-slate-600 text-white placeholder-gray-400"
                         data-testid="input-last-name"
                         {...field}
@@ -242,10 +231,10 @@ export default function EditProfileModal({ open, onOpenChange, user }: EditProfi
               name="phone"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-gray-300">Phone Number</FormLabel>
+                    <FormLabel className="text-gray-300">Telefone</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="Enter phone number"
+                        placeholder="Digite seu telefone"
                       className="bg-slate-700 border-slate-600 text-white placeholder-gray-400"
                       data-testid="input-phone"
                       {...field}
@@ -262,10 +251,10 @@ export default function EditProfileModal({ open, onOpenChange, user }: EditProfi
               name="bio"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-gray-300">Bio</FormLabel>
+                    <FormLabel className="text-gray-300">Biografia</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Tell us about yourself..."
+                        placeholder="Conte um pouco sobre você..."
                       className="bg-slate-700 border-slate-600 text-white placeholder-gray-400 resize-none"
                       rows={3}
                       data-testid="textarea-bio"
@@ -285,7 +274,7 @@ export default function EditProfileModal({ open, onOpenChange, user }: EditProfi
                 className="flex-1 bg-gray-600 hover:bg-gray-700"
                 data-testid="button-cancel-edit"
               >
-                Cancel
+                Cancelar
               </Button>
               <Button
                 type="submit"
@@ -293,7 +282,7 @@ export default function EditProfileModal({ open, onOpenChange, user }: EditProfi
                 className="flex-1 bg-blue-600 hover:bg-blue-700"
                 data-testid="button-save-profile"
               >
-                {updateProfileMutation.isPending ? "Saving..." : "Save Changes"}
+                {updateProfileMutation.isPending ? "Salvando..." : "Salvar alterações"}
               </Button>
             </div>
           </form>

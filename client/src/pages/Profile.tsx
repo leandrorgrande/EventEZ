@@ -8,7 +8,7 @@ import BottomNavigation from "@/components/BottomNavigation";
 import { useAuth } from "@/hooks/useAuth";
 import EditProfileModal from "@/components/EditProfileModal";
 import SettingsModal from "@/components/SettingsModal"; // EVENTU: Added Settings modal
-import { Settings, LogOut, Calendar, Users, Edit3, Shield } from "lucide-react";
+import { HelpCircle, LogOut, Calendar, Users, Edit3, Shield } from "lucide-react";
 import { signOutUser } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
@@ -66,6 +66,15 @@ export default function Profile() {
   }) || [];
   
   console.log('[Profile] Eventos do usuário:', userEvents.length);
+
+  // Contagem de eventos participados (confirmados) já encerrados
+  const attendedPastEventsCount = (allEvents || []).filter((event: any) => {
+    const attendeeIds: string[] = Array.isArray(event.attendeeIds) ? event.attendeeIds : [];
+    const isConfirmed = !!userProfile?.id && attendeeIds.includes(userProfile.id);
+    const endDate = event.endDateTime ? new Date(event.endDateTime) : (event.startDateTime ? new Date(event.startDateTime) : null);
+    const hasEnded = endDate ? endDate.getTime() < Date.now() : false;
+    return isConfirmed && hasEnded;
+  }).length;
 
   const handleLogout = async () => {
     try {
@@ -149,7 +158,7 @@ export default function Profile() {
             <CardContent className="p-4 text-center">
               <Users className="h-8 w-8 text-green-400 mx-auto mb-2" />
               <div className="text-2xl font-bold text-white" data-testid="text-events-attended">
-                0
+                {attendedPastEventsCount}
               </div>
               <div className="text-sm text-gray-400">Eventos Participados</div>
             </CardContent>
@@ -227,8 +236,8 @@ export default function Profile() {
             className="w-full justify-start text-white hover:bg-slate-700/50"
             data-testid="button-settings"
           >
-            <Settings className="mr-3 h-5 w-5 text-gray-400" />
-            Configurações
+            <HelpCircle className="mr-3 h-5 w-5 text-gray-400" />
+            contate o suporte
           </Button>
 
           {isAdmin && (
@@ -262,7 +271,7 @@ export default function Profile() {
       <EditProfileModal
         open={editProfileOpen}
         onOpenChange={setEditProfileOpen}
-        user={user}
+        user={userProfile}
       />
 
       <SettingsModal
