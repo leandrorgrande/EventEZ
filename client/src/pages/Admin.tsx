@@ -39,6 +39,11 @@ export default function Admin() {
   const [debugEventsData, setDebugEventsData] = useState<any>(null);
   const [isLoadingDebug, setIsLoadingDebug] = useState(false);
   const [isUpdatingAll, setIsUpdatingAll] = useState(false);
+  // SerpApi import (one-time) states
+  const [serpApiKey, setSerpApiKey] = useState<string>("");
+  const [serpImporting, setSerpImporting] = useState(false);
+  const [serpResults, setSerpResults] = useState<any | null>(null);
+  const [serpLimit, setSerpLimit] = useState<number>(50);
 
   // Queries (enabled only if admin to prevent unnecessary calls)
   const { data: allUsers = [] } = useQuery({
@@ -207,6 +212,43 @@ export default function Admin() {
       toast({ title: "Erro no scraping", description: error.message, variant: "destructive" });
     },
     onSettled: () => setIsScraping(false),
+  });
+
+  // Import Popular Times via SerpApi (one-time, sequential)
+  const importSerpApiMutation = useMutation({
+    mutationFn: async () => {
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      setSerpResults(null);
+      const body: any = {
+        limit: serpLimit,
+        type: 'bar',
+        areaIncludes: 'Gonzaga',
+      };
+      if (serpApiKey) body.apiKey = serpApiKey; // opcional, não persiste
+      const response = await fetch(`${API_URL}/places/popular-times/import-once`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) {
+        const txt = await response.text();
+        throw new Error(txt || 'Falha ao importar via SerpApi');
+      }
+      return response.json();
+    },
+    onMutate: () => setSerpImporting(true),
+    onSuccess: (data) => {
+      setSerpResults(data);
+      toast({ title: 'Importação concluída', description: `${data.updated} atualizados, ${data.failed} falhas (de ${data.total})` });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Erro na importação', description: error.message, variant: 'destructive' });
+    },
+    onSettled: () => setSerpImporting(false),
   });
 
   // Função para atualizar um place individual
@@ -838,6 +880,68 @@ export default function Admin() {
                     ))}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+            {/* SerpApi Import - Bares do Gonzaga */}
+            <Card className="bg-slate-800 border-slate-700 mt-4">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5" />
+                  Popular Times (SerpApi) – Bares do Gonzaga
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <Label className="text-gray-300">SerpApi Key (opcional)</Label>
+                    <Input
+                      type="password"
+                      placeholder="Cole sua SERPAPI_API_KEY"
+                      value={serpApiKey}
+                      onChange={(e) => setSerpApiKey(e.target.value)}
+                      className="bg-slate-700 border-slate-600 text-white placeholder-gray-400"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-gray-300">Limite</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={250}
+                      value={serpLimit}
+                      onChange={(e) => setSerpLimit(parseInt(e.target.value || '0', 10))}
+                      className="bg-slate-700 border-slate-600 text-white placeholder-gray-400"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      onClick={() => importSerpApiMutation.mutate()}
+                      disabled={serpImporting}
+                      className="w-full bg-blue-600 hover:bg-blue-700"
+                    >
+                      {serpImporting ? 'Importando...' : 'Importar agora'}
+                    </Button>
+                  </div>
+                </div>
+
+                {serpResults && (
+                  <div className="mt-2">
+                    <div className="text-sm text-gray-300 mb-2">
+                      Total: {serpResults.total} | Atualizados: {serpResults.updated} | Falhas: {serpResults.failed}
+                    </div>
+                    <div className="max-h-64 overflow-auto bg-slate-900 border border-slate-700 rounded p-2 text-xs">
+                      {Array.isArray(serpResults.results) && serpResults.results.map((r: any, i: number) => (
+                        <div key={i} className={`py-1 ${r.ok ? 'text-green-400' : 'text-red-400'}`}>
+                          {r.id}: {r.ok ? 'ok' : 'falha'}{r.error ? ` - ${r.error}` : ''}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="text-xs text-gray-500">
+                  Observação: Use o campo de chave somente para testes locais. Em produção, configure a variável de ambiente SERPAPI_API_KEY nas Functions.
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

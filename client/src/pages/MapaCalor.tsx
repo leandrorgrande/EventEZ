@@ -429,30 +429,31 @@ export default function MapaCalor() {
         heatmapData.push({ location, weight });
       }
 
-      // Adicionar marcador: se fechado ou se popularidade > 40%
-      if (isClosed || popularity >= 40) {
+      // Adicionar marcador: se fechado (dia todo) ou se popularidade > 40%
+      if ((place as any).openingHours?.[dayKey]?.closed === true || popularity >= 40) {
         const marker = new google.maps.Marker({
           position: location,
           map,
-          title: isClosed ? `${place.name} - 🔒 Fechado` : `${place.name} - ${popularity}%`,
+          title: ((place as any).openingHours?.[dayKey]?.closed === true) ? `${place.name} - 🔒 Fechado` : `${place.name} - ${popularity}%`,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: isClosed ? 6 : 6 + (popularity / 8), // Tamanho menor para fechado
-            fillColor: isClosed ? '#000000' : getColorByPopularity(popularity),
+            scale: ((place as any).openingHours?.[dayKey]?.closed === true) ? 6 : 6 + (popularity / 8), // Tamanho menor para fechado
+            fillColor: ((place as any).openingHours?.[dayKey]?.closed === true) ? '#000000' : getColorByPopularity(popularity),
             fillOpacity: 0.9,
             strokeColor: '#ffffff',
             strokeWeight: 2,
           },
-          animation: isClosed ? undefined : (popularity >= 80 ? google.maps.Animation.BOUNCE : undefined),
+          animation: ((place as any).openingHours?.[dayKey]?.closed === true) ? undefined : (popularity >= 80 ? google.maps.Animation.BOUNCE : undefined),
         });
 
         // InfoWindow ao clicar
-        const statusLabel = isClosed ? '🔒 Fechado' : `Movimento ${getPopularityLabel(popularity)}`;
-        const bgColor = isClosed ? '#000000' : getColorByPopularity(popularity);
+        const isClosedAllDayLocal = (place as any).openingHours?.[dayKey]?.closed === true;
+        const statusLabel = isClosedAllDayLocal ? '🔒 Fechado' : `Movimento ${getPopularityLabel(popularity)}`;
+        const bgColor = isClosedAllDayLocal ? '#000000' : getColorByPopularity(popularity);
         
         // Calcular mensagem de horário condizente com status
         let timeInfo = '';
-        if (isClosed) {
+        if (isClosedAllDayLocal) {
           const nextOpening = getNextOpeningTime(place, selectedDay, selectedHour);
           if (nextOpening) {
             if (nextOpening.isToday) {
@@ -1220,10 +1221,9 @@ export default function MapaCalor() {
               const isClosedByHours = (place as any).openingHours?.[dayKey]?.closed === true;
               // Obter popularidade (0 se não existir ou se estiver fechado)
               const rawPopularity = place.popularTimes?.[dayKey]?.[selectedHour];
-              const popularity = isClosedByHours ? 0 : (rawPopularity !== undefined ? rawPopularity : 0);
-              // Está fechado se popularidade é 0 ou se explicitamente marcado como closed
-              const isClosed = popularity === 0 || isClosedByHours;
-              const color = isClosed ? '#000000' : getColorByPopularity(popularity);
+              const popularity = (rawPopularity !== undefined ? rawPopularity : 0);
+              const isClosedAllDay = isClosedByHours;
+              const color = isClosedAllDay ? '#000000' : getColorByPopularity(popularity);
               
               return (
                 <Card 
@@ -1290,7 +1290,7 @@ export default function MapaCalor() {
                           
                           // Calcular próximo horário de abertura se estiver fechado
                           let openingInfo = '';
-                          if (isClosed) {
+                          if (isClosedAllDay) {
                             const nextOpening = getNextOpeningTime(place, dayKey, selectedHour);
                             if (nextOpening) {
                               if (nextOpening.isToday) {
@@ -1305,7 +1305,7 @@ export default function MapaCalor() {
                             <p className="text-[10px] md:text-xs mt-1">
                               {dayHours.closed ? (
                                 <span className="text-red-400">🔒 Fechado o dia todo{openingInfo && <span className="text-green-400">{openingInfo}</span>}</span>
-                              ) : isClosed ? (
+                              ) : isClosedAllDay ? (
                                 <span className="text-red-400">🔒 Fechado{openingInfo && <span className="text-green-400">{openingInfo}</span>}</span>
                               ) : (
                                 <span className="text-green-400">
