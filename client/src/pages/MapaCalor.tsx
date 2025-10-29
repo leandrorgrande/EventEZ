@@ -12,6 +12,7 @@ import { ptBR } from "date-fns/locale";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Loader2, Calendar as CalendarIcon, Clock, Filter, MapPin, ChevronDown, ChevronUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 
 // Coordenadas de Santos, SP
 const SANTOS_CENTER = { lat: -23.9608, lng: -46.3332 };
@@ -78,6 +79,7 @@ export default function MapaCalor() {
   const markersMap = useRef<Map<string, { marker: any; infoWindow: any }>>(new Map()); // Mapa de placeId -> marker/infoWindow
   const mapRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { isAdmin } = useAuth();
 
   // Obter horário atual de Brasília
   const getBrasiliaTime = () => {
@@ -98,7 +100,7 @@ export default function MapaCalor() {
   const [selectedDate, setSelectedDate] = useState<Date>(brasiliaTime); // Padrão: Data atual
   const [selectedHour, setSelectedHour] = useState<number>(brasiliaTime.getHours()); // Padrão: Hora atual
   const [selectedType, setSelectedType] = useState<string>('all'); // Filtro de tipo
-  const [statusFilter, setStatusFilter] = useState<'all' | 'openOnly'>('all'); // Filtro de status
+  const [statusFilter, setStatusFilter] = useState<'all' | 'openOnly'>('openOnly'); // Filtro de status (default: Apenas abertos)
   const [minRating, setMinRating] = useState<number>(0); // Filtro de avaliação mínima
   const [filtersExpanded, setFiltersExpanded] = useState<boolean>(false); // Controle de expansão dos filtros - padrão fechado
 
@@ -750,6 +752,7 @@ export default function MapaCalor() {
         {/* Botões de Busca e Controles - Apenas se expandido */}
         {filtersExpanded && (
           <>
+            {isAdmin && (
             <div className="flex items-center gap-2 flex-wrap justify-end">
               {(isLoading || searchPlacesMutation.isPending) && (
                 <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
@@ -828,6 +831,7 @@ export default function MapaCalor() {
                 Buscar + na área
               </Button>
             </div>
+            )}
 
             {/* Controles */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
