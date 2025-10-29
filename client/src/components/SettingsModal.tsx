@@ -37,9 +37,9 @@ import { Mail, HelpCircle, Trash2 } from "lucide-react";
 
 // EVENTU: Settings modal for user account management
 const settingsSchema = z.object({
-  email: z.string().email("Please enter a valid email").optional(),
+  email: z.string().email("Por favor, insira um email válido").optional(),
   currentPassword: z.string().optional(),
-  newPassword: z.string().min(8, "Password must be at least 8 characters").optional(),
+  newPassword: z.string().min(8, "A senha deve ter no mínimo 8 caracteres").optional(),
   confirmPassword: z.string().optional(),
   supportMessage: z.string().optional(),
 }).refine((data) => {
@@ -48,7 +48,7 @@ const settingsSchema = z.object({
   }
   return true;
 }, {
-  message: "Passwords don't match",
+  message: "As senhas não coincidem",
   path: ["confirmPassword"],
 });
 
@@ -80,8 +80,8 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
       // Mock implementation - real app would verify current password first
       await new Promise(resolve => setTimeout(resolve, 1000));
       toast({
-        title: "Email Update",
-        description: "Email update feature coming soon! For now, contact support to change your email.",
+        title: "Atualização de Email",
+        description: "A funcionalidade de atualização de email em breve! Por enquanto, entre em contato com o suporte para alterar seu email.",
       });
       return {};
     },
@@ -93,8 +93,8 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
       // Mock implementation - real app would use proper auth endpoint
       await new Promise(resolve => setTimeout(resolve, 1000));
       toast({
-        title: "Password Changed",
-        description: "Your password has been updated successfully.",
+        title: "Senha Alterada",
+        description: "Sua senha foi atualizada com sucesso.",
       });
       return {};
     },
@@ -106,8 +106,8 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
       // Mock implementation - real app would require confirmation and proper authorization
       await new Promise(resolve => setTimeout(resolve, 1000));
       toast({
-        title: "Account Deletion",
-        description: "Account deletion feature coming soon! Please contact support to delete your account.",
+        title: "Exclusão de Conta",
+        description: "A funcionalidade de exclusão de conta em breve! Por favor, entre em contato com o suporte para excluir sua conta.",
         variant: "destructive",
       });
       return {};
@@ -122,8 +122,8 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
       updateEmailMutation.mutate(data);
     } else {
       toast({
-        title: "No Changes",
-        description: "No changes were made to your account.",
+        title: "Nenhuma Alteração",
+        description: "Nenhuma alteração foi feita na sua conta.",
       });
     }
   };
@@ -132,8 +132,8 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
     const message = form.getValues("supportMessage");
     if (!message) {
       toast({
-        title: "Message Required",
-        description: "Please enter a message for support.",
+        title: "Mensagem Obrigatória",
+        description: "Por favor, insira uma mensagem para o suporte.",
         variant: "destructive",
       });
       return;
@@ -141,8 +141,8 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
 
     // EVENTU: Mock support message submission
     toast({
-      title: "Message Sent",
-      description: "Your message has been sent to our support team. We'll get back to you soon!",
+      title: "Mensagem Enviada",
+      description: "Sua mensagem foi enviada para nossa equipe de suporte. Entraremos em contato em breve!",
     });
     form.setValue("supportMessage", "");
   };
@@ -161,9 +161,9 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle data-testid="text-settings-title">Settings</DialogTitle>
+            <DialogTitle data-testid="text-settings-title">Configurações</DialogTitle>
             <DialogDescription className="text-gray-400">
-              Manage your account settings and preferences
+              Gerencie as configurações e preferências da sua conta
             </DialogDescription>
           </DialogHeader>
 
@@ -173,7 +173,7 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-gray-300 flex items-center">
                   <Mail className="mr-2 h-4 w-4" />
-                  Account Information
+                  Informações da Conta
                 </h3>
                 
                 <FormField
@@ -181,11 +181,11 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-gray-300">Email Address</FormLabel>
+                      <FormLabel className="text-gray-300">Endereço de Email</FormLabel>
                       <FormControl>
                         <Input
                           type="email"
-                          placeholder="your@email.com"
+                          placeholder="seu@email.com"
                           className="bg-slate-700 border-slate-600 text-white placeholder-gray-400"
                           data-testid="input-email"
                           {...field}
@@ -199,18 +199,18 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
 
               {/* Password Section */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-gray-300">Change Password</h3>
+                <h3 className="text-sm font-semibold text-gray-300">Alterar Senha</h3>
                 
                 <FormField
                   control={form.control}
                   name="currentPassword"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-gray-300">Current Password</FormLabel>
+                      <FormLabel className="text-gray-300">Senha Atual</FormLabel>
                       <FormControl>
                         <Input
                           type="password"
-                          placeholder="Enter current password"
+                          placeholder="Digite sua senha atual"
                           className="bg-slate-700 border-slate-600 text-white placeholder-gray-400"
                           data-testid="input-current-password"
                           {...field}
@@ -226,11 +226,11 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
                   name="newPassword"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-gray-300">New Password</FormLabel>
+                      <FormLabel className="text-gray-300">Nova Senha</FormLabel>
                       <FormControl>
                         <Input
                           type="password"
-                          placeholder="Enter new password"
+                          placeholder="Digite sua nova senha"
                           className="bg-slate-700 border-slate-600 text-white placeholder-gray-400"
                           data-testid="input-new-password"
                           {...field}
@@ -246,11 +246,11 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
                   name="confirmPassword"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-gray-300">Confirm New Password</FormLabel>
+                      <FormLabel className="text-gray-300">Confirmar Nova Senha</FormLabel>
                       <FormControl>
                         <Input
                           type="password"
-                          placeholder="Confirm new password"
+                          placeholder="Confirme sua nova senha"
                           className="bg-slate-700 border-slate-600 text-white placeholder-gray-400"
                           data-testid="input-confirm-password"
                           {...field}
@@ -266,7 +266,7 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-gray-300 flex items-center">
                   <HelpCircle className="mr-2 h-4 w-4" />
-                  Contact Support
+                  Contatar Suporte
                 </h3>
                 
                 <FormField
@@ -274,10 +274,10 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
                   name="supportMessage"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-gray-300">Message</FormLabel>
+                      <FormLabel className="text-gray-300">Mensagem</FormLabel>
                       <FormControl>
                         <Textarea
-                          placeholder="How can we help you?"
+                          placeholder="Como podemos ajudar?"
                           className="bg-slate-700 border-slate-600 text-white placeholder-gray-400 resize-none"
                           rows={4}
                           data-testid="textarea-support"
@@ -296,7 +296,7 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
                   className="w-full bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
                   data-testid="button-send-support"
                 >
-                  Send Message
+                  Enviar Mensagem
                 </Button>
               </div>
 
@@ -309,7 +309,7 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
                   className="flex-1 bg-gray-600 hover:bg-gray-700"
                   data-testid="button-cancel-settings"
                 >
-                  Cancel
+                  Cancelar
                 </Button>
                 <Button
                   type="submit"
@@ -317,7 +317,7 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
                   className="flex-1 bg-blue-600 hover:bg-blue-700"
                   data-testid="button-save-settings"
                 >
-                  {updateEmailMutation.isPending || changePasswordMutation.isPending ? "Saving..." : "Save Changes"}
+                  {updateEmailMutation.isPending || changePasswordMutation.isPending ? "Salvando..." : "Salvar Alterações"}
                 </Button>
               </div>
 
@@ -331,10 +331,10 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
                   data-testid="button-delete-account"
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Account
+                  Excluir Conta
                 </Button>
                 <p className="text-xs text-gray-500 mt-2 text-center">
-                  This action cannot be undone. All your data will be permanently deleted.
+                  Esta ação não pode ser desfeita. Todos os seus dados serão permanentemente excluídos.
                 </p>
               </div>
             </form>
@@ -346,28 +346,28 @@ export default function SettingsModal({ open, onOpenChange, user }: SettingsModa
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent className="bg-slate-800 border-slate-700 text-white">
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogTitle>Tem certeza absoluta?</AlertDialogTitle>
             <AlertDialogDescription className="text-gray-400">
-              This action cannot be undone. This will permanently delete your account
-              and remove all your data from our servers, including:
+              Esta ação não pode ser desfeita. Isso excluirá permanentemente sua conta
+              e removerá todos os seus dados dos nossos servidores, incluindo:
               <ul className="list-disc ml-5 mt-2">
-                <li>All your events</li>
-                <li>Your profile information</li>
-                <li>Your event history</li>
-                <li>Any business claims</li>
+                <li>Todos os seus eventos</li>
+                <li>Suas informações de perfil</li>
+                <li>Seu histórico de eventos</li>
+                <li>Qualquer reivindicação de empresa</li>
               </ul>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600" data-testid="button-cancel-delete">
-              Cancel
+              Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
               className="bg-red-600 hover:bg-red-700 text-white"
               data-testid="button-confirm-delete"
             >
-              Yes, Delete My Account
+              Sim, Excluir Minha Conta
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

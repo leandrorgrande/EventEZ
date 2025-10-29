@@ -7,10 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import BottomNavigation from "@/components/BottomNavigation";
 import { useAuth } from "@/hooks/useAuth";
 import EditProfileModal from "@/components/EditProfileModal";
-import BusinessClaimModal from "@/components/BusinessClaimModal";
 import SettingsModal from "@/components/SettingsModal"; // EVENTU: Added Settings modal
-import EventHistoryModal from "@/components/EventHistoryModal"; // EVENTU: Added Event History modal
-import { Settings, History, LogOut, Calendar, Users, Edit3, Building2, Shield } from "lucide-react";
+import { Settings, LogOut, Calendar, Users, Edit3, Shield } from "lucide-react";
 import { signOutUser } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
@@ -26,9 +24,7 @@ export default function Profile() {
   console.log('[Profile] isAdmin:', isAdmin);
   console.log('[Profile] userType:', userProfile?.userType);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
-  const [businessClaimOpen, setBusinessClaimOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false); // EVENTU: Settings modal state
-  const [historyOpen, setHistoryOpen] = useState(false); // EVENTU: History modal state
 
   const { data: allEvents } = useQuery({
     queryKey: ["/api/events-all-profile"],
@@ -235,16 +231,6 @@ export default function Profile() {
             Configurações
           </Button>
 
-          <Button
-            variant="ghost"
-            onClick={() => setHistoryOpen(true)}
-            className="w-full justify-start text-white hover:bg-slate-700/50"
-            data-testid="button-history"
-          >
-            <History className="mr-3 h-5 w-5 text-gray-400" />
-            Histórico de Eventos
-          </Button>
-
           {isAdmin && (
             <Button
               variant="ghost"
@@ -254,18 +240,6 @@ export default function Profile() {
             >
               <Shield className="mr-3 h-5 w-5" />
               Painel Admin
-            </Button>
-          )}
-
-          {userProfile.userType !== "business" && (
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-white hover:bg-slate-700/50"
-              onClick={() => setBusinessClaimOpen(true)}
-              data-testid="button-claim-business"
-            >
-              <Building2 className="mr-3 h-5 w-5 text-gray-400" />
-              Reivindicar Empresa
             </Button>
           )}
 
@@ -291,22 +265,12 @@ export default function Profile() {
         user={user}
       />
 
-      <BusinessClaimModal
-        open={businessClaimOpen}
-        onOpenChange={setBusinessClaimOpen}
-      />
-
       <SettingsModal
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         user={user}
       />
 
-      <EventHistoryModal
-        open={historyOpen}
-        onOpenChange={setHistoryOpen}
-        user={user}
-      />
     </div>
   );
 }
