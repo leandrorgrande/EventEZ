@@ -970,10 +970,30 @@ const fetchPopularTimesFromSerpApi = async (name, address) => {
 };
 app.post('/places/popular-times/import-once', authenticate, async (req, res) => {
     try {
-        const limit = Math.min(parseInt(req.body?.limit || '1000', 10) || 1000, 1000);
-        console.log('[Import] Iniciando import popularTimes (one-time)', { limit });
+        const body = req.body || {};
+        const limit = Math.min(parseInt(body.limit || '1000', 10) || 1000, 1000);
+        const typeFilter = body.type;
+        const areaIncludes = body.areaIncludes;
+        const nameIncludes = body.nameIncludes;
+        const overrideApiKey = body.apiKey; // opcional para testes
+        console.log('[Import] Iniciando import popularTimes (one-time)', { limit, typeFilter, areaIncludes, nameIncludes });
         const snap = await db.collection('places').get();
         let places = snap.docs.map(d => ({ docRef: d.ref, id: d.id, ...d.data() }));
+        // Filtros opcionais
+        if (typeFilter) {
+            const t = typeFilter.toLowerCase();
+            places = places.filter(p => Array.isArray(p.types) && p.types.some((x) => (x || '').toLowerCase() === t));
+        }
+        if (areaIncludes) {
+            const q = areaIncludes.toLowerCase();
+            places = places.filter(p => (p.formattedAddress || p.address || '').toLowerCase().includes(q)
+                || (p.name || p.displayName?.text || '').toLowerCase().includes(q));
+        }
+        if (nameIncludes) {
+            const q = nameIncludes.toLowerCase();
+            places = places.filter(p => (p.name || p.displayName?.text || '').toLowerCase().includes(q));
+        }
+        // Apenas os que ainda não possuem popularTimes
         places = places.filter(p => !p.popularTimes).slice(0, limit);
         let updated = 0;
         let failed = 0;
@@ -981,6 +1001,10 @@ app.post('/places/popular-times/import-once', authenticate, async (req, res) => 
         for (const place of places) {
             try {
                 let popularTimes = null;
+                // Permitir override de API key somente nesta chamada, sem persistir
+                if (overrideApiKey) {
+                    process.env.SERPAPI_API_KEY = overrideApiKey;
+                }
                 popularTimes = await fetchPopularTimesFromSerpApi(place.name || place.displayName?.text || '', place.formattedAddress);
                 if (!popularTimes && place.googleMapsUri) {
                     popularTimes = await scrapePopularTimes(place.name || place.displayName?.text || '', place.googleMapsUri);
@@ -994,6 +1018,8 @@ app.post('/places/popular-times/import-once', authenticate, async (req, res) => 
                     failed++;
                     results.push({ id: place.id, ok: false });
                 }
+                // Respeitar limites - aguardar 1.2s entre chamadas
+                await new Promise(resolve => setTimeout(resolve, 1200));
             }
             catch (err) {
                 console.error('[Import] erro por lugar:', err?.message || err);

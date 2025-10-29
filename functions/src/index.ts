@@ -1342,6 +1342,61 @@ app.post('/places/update-all-hours-stream', authenticate, async (req: express.Re
   }
 });
 
+// Excluir um lugar por docId (admin)
+app.delete('/places/:docId', authenticate, async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    const { docId } = req.params;
+    if (!docId) {
+      res.status(400).json({ message: 'docId é obrigatório' });
+      return;
+    }
+    const ref = db.collection('places').doc(docId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ message: 'Place não encontrado' });
+      return;
+    }
+    await ref.delete();
+    res.json({ success: true, deletedId: docId });
+  } catch (error: any) {
+    console.error('[API] Erro ao excluir place:', error);
+    res.status(500).json({ message: error.message || 'Failed to delete place' });
+  }
+});
+
+// Atualizar tipos do lugar (admin)
+app.patch('/places/:docId/types', authenticate, async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    const { docId } = req.params;
+    const { types } = req.body as { types?: string[] };
+    if (!docId) {
+      res.status(400).json({ message: 'docId é obrigatório' });
+      return;
+    }
+    if (!Array.isArray(types) || types.length === 0) {
+      res.status(400).json({ message: 'types (string[]) é obrigatório' });
+      return;
+    }
+    const allowed = new Set(['bar', 'night_club', 'restaurant', 'cafe', 'bakery', 'movie_theater', 'amusement_park']);
+    const sanitized = Array.from(new Set(types.filter((t: string) => allowed.has(t))));
+    if (sanitized.length === 0) {
+      res.status(400).json({ message: 'Nenhum tipo válido informado' });
+      return;
+    }
+    const ref = db.collection('places').doc(docId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ message: 'Place não encontrado' });
+      return;
+    }
+    await ref.update({ types: sanitized, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    res.json({ success: true, id: docId, types: sanitized });
+  } catch (error: any) {
+    console.error('[API] Erro ao atualizar types do place:', error);
+    res.status(500).json({ message: error.message || 'Failed to update place types' });
+  }
+});
+
 // Endpoint para atualizar googleMapsUri de um place
 app.patch('/places/:placeId/googlemaps', authenticate, async (req: express.Request, res: express.Response): Promise<void> => {
   try {

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import BottomNavigation from "@/components/BottomNavigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -20,7 +21,8 @@ import {
   CheckCircle, 
   XCircle, 
   Clock,
-  Edit
+  Edit,
+  Trash
 } from "lucide-react";
 
 export default function Admin() {
@@ -38,6 +40,51 @@ export default function Admin() {
   const [manualGoogleMapsUrl, setManualGoogleMapsUrl] = useState('');
   const [debugEventsData, setDebugEventsData] = useState<any>(null);
   const [isLoadingDebug, setIsLoadingDebug] = useState(false);
+  const { data: allPlaces = [], refetch: refetchPlaces } = useQuery({
+    queryKey: ["/api/places-admin"],
+    enabled: !!isAdmin,
+    queryFn: async () => {
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      const response = await fetch(`${API_URL}/places`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      if (!response.ok) throw new Error(`Failed to fetch places: ${response.status}`);
+      return response.json();
+    }
+  });
+
+  const deletePlaceMutation = useMutation({
+    mutationFn: async (docId: string) => {
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      const resp = await fetch(`${API_URL}/places/${docId}`, { method: 'DELETE', headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: 'Lugar excluído', description: 'O lugar foi removido com sucesso.' });
+      refetchPlaces();
+    },
+    onError: (err: any) => toast({ title: 'Erro ao excluir', description: err.message || String(err), variant: 'destructive' })
+  });
+
+  const updateTypesMutation = useMutation({
+    mutationFn: async ({ docId, types }: { docId: string; types: string[] }) => {
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      const resp = await fetch(`${API_URL}/places/${docId}/types`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }, body: JSON.stringify({ types }) });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: 'Tipo atualizado', description: 'Tipos do lugar atualizados.' });
+      refetchPlaces();
+    },
+    onError: (err: any) => toast({ title: 'Erro ao atualizar tipo', description: err.message || String(err), variant: 'destructive' })
+  });
   const [isUpdatingAll, setIsUpdatingAll] = useState(false);
   // SerpApi import (one-time) states
   const [serpApiKey, setSerpApiKey] = useState<string>("");
@@ -446,11 +493,62 @@ export default function Admin() {
         </div>
 
         <Tabs defaultValue="events" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3 bg-slate-800">
+          <TabsList className="grid w-full grid-cols-4 bg-slate-800">
             <TabsTrigger value="events" className="data-[state=active]:bg-slate-700">Events</TabsTrigger>
             <TabsTrigger value="users" className="data-[state=active]:bg-slate-700">Users</TabsTrigger>
+            <TabsTrigger value="places" className="data-[state=active]:bg-slate-700">Places</TabsTrigger>
             <TabsTrigger value="scraping" className="data-[state=active]:bg-slate-700">Scraping</TabsTrigger>
           </TabsList>
+          <TabsContent value="places" className="space-y-4">
+            <Card className="bg-slate-800 border-slate-700">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">Gerenciar Lugares
+                <span className="text-xs text-gray-400 ml-2">{Array.isArray(allPlaces) ? allPlaces.length : 0}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {Array.isArray(allPlaces) && allPlaces.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {allPlaces.map((p: any) => (
+                      <div key={p.id} className="p-3 bg-slate-700/50 rounded border border-slate-600">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-white font-semibold truncate">{p.name}</div>
+                            <div className="text-xs text-gray-400 truncate">{p.formattedAddress || ''}</div>
+                            <div className="mt-2 flex items-center gap-2">
+                              <span className="text-xs text-gray-300">Tipo:</span>
+                              <Select value={(p.types?.[0]) || ''} onValueChange={(v) => updateTypesMutation.mutate({ docId: p.id, types: [v] })}>
+                                <SelectTrigger className="h-8 bg-slate-600 border-slate-500 text-white w-40">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-700 border-slate-600 text-white">
+                                  <SelectItem value="bar">bar</SelectItem>
+                                  <SelectItem value="night_club">night_club</SelectItem>
+                                  <SelectItem value="restaurant">restaurant</SelectItem>
+                                  <SelectItem value="cafe">cafe</SelectItem>
+                                  <SelectItem value="bakery">bakery</SelectItem>
+                                  <SelectItem value="movie_theater">movie_theater</SelectItem>
+                                  <SelectItem value="amusement_park">amusement_park</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-2 flex-shrink-0">
+                            <Button variant="destructive" size="sm" onClick={() => deletePlaceMutation.mutate(p.id)}>
+                              <Trash className="h-4 w-4 mr-1" /> Excluir
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="mt-2 text-xs text-gray-400">rating: {p.rating ?? '—'} • reviews: {p.userRatingsTotal ?? 0}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center text-gray-400">Nenhum lugar encontrado</div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="events" className="space-y-4">
             {/* Botão de Debug */}
