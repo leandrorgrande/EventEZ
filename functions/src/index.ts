@@ -1,10 +1,14 @@
 import { onRequest } from "firebase-functions/v2/https";
+import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import express from "express";
 import cors from "cors";
 import * as cheerio from "cheerio";
 
 admin.initializeApp();
+
+// Secret para SerpApi (injetado como variável de ambiente)
+const SERPAPI_API_KEY = defineSecret('SERPAPI_API_KEY');
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -2069,4 +2073,4 @@ app.post('/places/scrape-popular-times', authenticate, async (req: express.Reque
 });
 
 // Export all functions
-export const api = onRequest({ region: 'us-central1' }, app);
+export const api = onRequest({ region: 'us-central1', secrets: [SERPAPI_API_KEY] }, app);
