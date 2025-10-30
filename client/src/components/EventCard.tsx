@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 import { Calendar, MapPin, Users, Clock } from "lucide-react";
 
 interface EventCardProps {
@@ -10,6 +11,7 @@ interface EventCardProps {
 }
 
 export default function EventCard({ event, isGoing, onToggleJoin }: EventCardProps) {
+  const { toast } = useToast();
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("pt-BR", {
@@ -46,6 +48,119 @@ export default function EventCard({ event, isGoing, onToggleJoin }: EventCardPro
   };
 
   const isPast = getEventEnded();
+
+  const buildEventShareUrl = (): string => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://eventu.app';
+    // Fallback simples para levar ao app com referência do evento
+    const url = new URL(origin);
+    url.searchParams.set('event', event.id);
+    return url.toString();
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return ok;
+    } catch {
+      return false;
+    }
+  };
+
+  const openInstagramStory = () => {
+    try {
+      const deepLink = 'instagram://story-camera';
+      const opened = window.open(deepLink, '_blank');
+      return !!opened;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleShare = async () => {
+    const eventUrl = buildEventShareUrl();
+    const shareText = `Eu vou no ${event.title}! Confirme sua presença: ${eventUrl}`;
+
+    // Marcar presença automaticamente antes de compartilhar (se ainda não marcado e evento não for passado)
+    if (!isPast && !isGoing) {
+      onToggleJoin?.(event.id, true);
+    }
+
+    // Tentar Web Share API com arquivo (quando imagem disponível e suportado)
+    const tryWebShareWithFile = async (): Promise<boolean> => {
+      try {
+        const isImage = event.mediaType === 'image' && typeof event.mediaUrl === 'string' && event.mediaUrl.length > 0;
+        if (!isImage) return false;
+
+        const response = await fetch(event.mediaUrl, { mode: 'cors' });
+        if (!response.ok) return false;
+        const blob = await response.blob();
+        const fileName = `evento-${event.id}.jpg`;
+        const fileType = blob.type || 'image/jpeg';
+        const file = new File([blob], fileName, { type: fileType });
+
+        // @ts-expect-error canShare existe em navegadores que suportam Web Share Level 2
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            // @ts-expect-error share aceita files em navegadores compatíveis
+            files: [file],
+            title: event.title,
+            text: shareText,
+            url: eventUrl,
+          });
+          return true;
+        }
+      } catch {
+        // Ignorar e seguir para fallbacks
+      }
+      return false;
+    };
+
+    // Tentar Web Share API sem arquivo
+    if (navigator.share) {
+      const sharedWithFile = await tryWebShareWithFile();
+      if (sharedWithFile) return;
+      try {
+        await navigator.share({ title: event.title, text: shareText, url: eventUrl });
+        return;
+      } catch {
+        // Usuário pode ter cancelado; seguir para fallback
+      }
+    }
+
+    // Fallback: Abrir câmera de Stories do Instagram (se disponível) e copiar link
+    const opened = openInstagramStory();
+    const copied = await copyToClipboard(`${shareText}`);
+    if (opened) {
+      toast({
+        title: 'Abra o Instagram',
+        description: copied
+          ? 'Link copiado. Cole na sua Story e publique!'
+          : 'Não foi possível copiar o link automaticamente. Copie e compartilhe manualmente.',
+      });
+    } else {
+      toast({
+        title: 'Compartilhamento',
+        description: copied
+          ? 'Link do evento copiado. Compartilhe no Instagram Stories.'
+          : 'Não foi possível compartilhar automaticamente. Tente pela Web Share ou copie o link.',
+        variant: 'default',
+      });
+      // Último recurso: abrir o Instagram no navegador
+      try { window.open('https://instagram.com', '_blank'); } catch {}
+    }
+  };
 
   return (
     <Card className="bg-slate-800 border-slate-700 hover:border-slate-600 transition-colors">
@@ -112,6 +227,7 @@ export default function EventCard({ event, isGoing, onToggleJoin }: EventCardPro
           <Button
             variant="secondary"
             className="bg-gray-600 hover:bg-gray-700"
+            onClick={handleShare}
             data-testid={`button-share-event-${event.id}`}
           >
             Compartilhar
