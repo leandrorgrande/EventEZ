@@ -430,19 +430,27 @@ export default function MapaCalor() {
 
       // Adicionar marcador: se fechado (dia todo) ou se HÁ um valor de popularidade (inclui 0 = Tranquilo)
       if (isClosedAllDay || hasPopularity) {
+        // Escala do marcador: padronizar o "Muito Cheio" para não ficar maior que os demais
+        const baseScale = 6;
+        const dynamicScale = baseScale + (popularity / 8);
+        const scaleForVeryBusy = 12; // tamanho fixo para "Muito Cheio"
+        const finalScale = isClosedAllDay
+          ? baseScale
+          : (popularity >= 80 ? scaleForVeryBusy : dynamicScale);
         const marker = new google.maps.Marker({
           position: location,
           map,
           title: (isClosedAllDay) ? `${place.name} - 🔒 Fechado` : `${place.name} - ${getPopularityLabel(popularity)}`,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: (isClosedAllDay) ? 6 : 6 + (popularity / 8), // Tamanho menor para fechado
+            scale: finalScale, // Sem aumento adicional para "Muito Cheio"
             fillColor: (isClosedAllDay) ? '#000000' : getColorByPopularity(popularity),
             fillOpacity: 0.9,
             strokeColor: '#ffffff',
             strokeWeight: 2,
           },
-          animation: (isClosedAllDay) ? undefined : (popularity >= 80 ? google.maps.Animation.BOUNCE : undefined),
+          // Sem animação para manter estático mesmo quando muito cheio
+          animation: undefined,
         });
 
         // InfoWindow ao clicar
@@ -539,12 +547,13 @@ export default function MapaCalor() {
           title: `Evento: ${ev.title || ''}`,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: 8,
-            fillColor: '#3B82F6', // azul
-            fillOpacity: 0.95,
+            scale: 14, // maior para dar mais destaque
+            fillColor: '#2563EB', // azul mais forte
+            fillOpacity: 1,
             strokeColor: '#ffffff',
-            strokeWeight: 2,
-          }
+            strokeWeight: 3,
+          },
+          zIndex: 1000,
         });
 
         const infoWindow = new google.maps.InfoWindow({
