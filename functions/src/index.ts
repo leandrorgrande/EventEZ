@@ -986,6 +986,67 @@ const normalizePopularTimes = (raw: any): any | null => {
     out[day][h] = v;
   };
 
+  // Helper para converter string de hora (e.g. "7 AM", "18:00") para 0..23
+  const parseHour = (v: any, fallbackIndex: number): number => {
+    if (typeof v === 'number') return Math.max(0, Math.min(23, Math.floor(v)));
+    if (typeof v !== 'string') return fallbackIndex;
+    const s = v.trim();
+    // 24h "18:00"
+    let m = s.match(/^(\d{1,2})(?::(\d{2}))?$/);
+    if (m) {
+      const h = Math.max(0, Math.min(23, parseInt(m[1], 10)));
+      return h;
+    }
+    // 12h "7 AM"
+    m = s.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
+    if (m) {
+      let h = parseInt(m[1], 10);
+      const ap = (m[3] || '').toUpperCase();
+      if (ap === 'PM' && h !== 12) h += 12;
+      if (ap === 'AM' && h === 12) h = 0;
+      return Math.max(0, Math.min(23, h));
+    }
+    return fallbackIndex;
+  };
+
+  // setHour já definido acima
+
+  // 1) Novo formato SerpApi (Place Results): detail.place_results.popular_times.{day} = [{ time, busyness_score, ... }]
+  const placeResults = raw.place_results || undefined;
+  const prPopularTimes = placeResults?.popular_times || undefined;
+  if (prPopularTimes && typeof prPopularTimes === 'object') {
+    for (const key of Object.keys(prPopularTimes)) {
+      const day = mapDayName(key) as string | null;
+      if (!day || !dayKeys.includes(day)) continue;
+      const arr: any[] = Array.isArray(prPopularTimes[key]) ? prPopularTimes[key] : [];
+      arr.forEach((entry, idx) => {
+        const hour = parseHour(entry?.time, idx);
+        const value = typeof entry?.busyness_score === 'number' ? entry.busyness_score
+          : (typeof entry?.busy_percent === 'number' ? entry.busy_percent
+            : (typeof entry?.value === 'number' ? entry.value : 0));
+        setHour(day, hour, value);
+      });
+    }
+    return out;
+  }
+
+  // 2) Alternativo: raw.popular_times como objeto { monday: [...], ... }
+  if (raw.popular_times && typeof raw.popular_times === 'object' && !Array.isArray(raw.popular_times)) {
+    for (const key of Object.keys(raw.popular_times)) {
+      const day = mapDayName(key) as string | null;
+      if (!day || !dayKeys.includes(day)) continue;
+      const arr: any[] = Array.isArray(raw.popular_times[key]) ? raw.popular_times[key] : [];
+      arr.forEach((entry, idx) => {
+        const hour = parseHour(entry?.time, idx);
+        const value = typeof entry?.busyness_score === 'number' ? entry.busyness_score
+          : (typeof entry?.busy_percent === 'number' ? entry.busy_percent
+            : (typeof entry?.value === 'number' ? entry.value : 0));
+        setHour(day, hour, value);
+      });
+    }
+    return out;
+  }
+
   const arr = raw.popular_times || raw.populartimes || raw;
   if (Array.isArray(arr)) {
     arr.forEach((dayObj: any) => {
@@ -995,11 +1056,10 @@ const normalizePopularTimes = (raw: any): any | null => {
       if (Array.isArray(data)) {
         data.forEach((entry: any, idx: number) => {
           if (typeof entry === 'number') { setHour(key, idx, entry); return; }
-          const hour = typeof entry?.hour === 'number' ? entry.hour : (typeof entry?.time === 'string' ? (() => {
-            const m = entry.time.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
-            if (!m) return idx; let h = parseInt(m[1], 10); const ampm = (m[3] || '').toUpperCase();
-            if (ampm === 'PM' && h !== 12) h += 12; if (ampm === 'AM' && h === 12) h = 0; return h; })() : idx);
-          const value = typeof entry?.busy_percent === 'number' ? entry.busy_percent : (typeof entry?.value === 'number' ? entry.value : (typeof entry?.percentage === 'number' ? entry.percentage : 0));
+          const hour = typeof entry?.hour === 'number' ? entry.hour : parseHour(entry?.time, idx);
+          const value = typeof entry?.busyness_score === 'number' ? entry.busyness_score
+            : (typeof entry?.busy_percent === 'number' ? entry.busy_percent
+              : (typeof entry?.value === 'number' ? entry.value : (typeof entry?.percentage === 'number' ? entry.percentage : 0)));
           setHour(key, hour as number, value as number);
         });
       }
@@ -1120,7 +1180,7 @@ const fetchPopularTimesFromSerpApi = async (
         detail = detailRes?.data;
       }
     }
-    const normalized = normalizePopularTimes(detail?.popular_times || firstLocal?.popular_times || detail);
+    const normalized = normalizePopularTimes(detail || firstLocal);
     const openingHours = normalizeOpeningHoursFromSerpApi(detail);
     const isOpen = typeof detail?.opening_hours?.open_now === 'boolean' ? !!detail?.opening_hours?.open_now : null;
     return { popularTimes: normalized, openingHours, isOpen };
