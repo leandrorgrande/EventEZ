@@ -54,15 +54,18 @@ export default function EventCard({ event, isGoing, onToggleJoin }: EventCardPro
     // Fallback simples para levar ao app com referência do evento
     const url = new URL(origin);
     url.searchParams.set('event', event.id);
+    console.log('[EventCard] buildEventShareUrl', { origin, url: url.toString(), eventId: event.id });
     return url.toString();
   };
 
   const copyToClipboard = async (text: string) => {
     try {
       if (navigator.clipboard && window.isSecureContext) {
+        console.log('[EventCard] copyToClipboard using navigator.clipboard');
         await navigator.clipboard.writeText(text);
         return true;
       }
+      console.log('[EventCard] copyToClipboard using fallback textarea');
       const textarea = document.createElement('textarea');
       textarea.value = text;
       textarea.style.position = 'fixed';
@@ -72,8 +75,10 @@ export default function EventCard({ event, isGoing, onToggleJoin }: EventCardPro
       textarea.select();
       const ok = document.execCommand('copy');
       document.body.removeChild(textarea);
+      console.log('[EventCard] copyToClipboard fallback result', ok);
       return ok;
     } catch {
+      console.warn('[EventCard] copyToClipboard failed');
       return false;
     }
   };
@@ -81,19 +86,46 @@ export default function EventCard({ event, isGoing, onToggleJoin }: EventCardPro
   const openInstagramStory = () => {
     try {
       const deepLink = 'instagram://story-camera';
+      console.log('[EventCard] openInstagramStory trying deep link', deepLink);
       const opened = window.open(deepLink, '_blank');
+      // Tentar link web como fallback (desktop ou sem app)
+      if (!opened) {
+        const webLink = 'https://www.instagram.com/create/story';
+        console.log('[EventCard] openInstagramStory fallback to web link', webLink);
+        window.open(webLink, '_blank');
+      }
       return !!opened;
     } catch {
+      console.warn('[EventCard] openInstagramStory threw');
       return false;
     }
   };
 
   const handleShare = async () => {
+    const ua = navigator.userAgent;
+    const platform = (navigator as any).platform;
+    const hasShare = typeof navigator.share === 'function';
+    const hasCanShare = typeof (navigator as any).canShare === 'function';
+    const secure = window.isSecureContext;
+    console.log('[EventCard] handleShare init', {
+      eventId: event.id,
+      title: event.title,
+      mediaUrl: event.mediaUrl,
+      mediaType: event.mediaType,
+      isGoing,
+      isPast,
+      ua,
+      platform,
+      hasShare,
+      hasCanShare,
+      secure,
+    });
     const eventUrl = buildEventShareUrl();
     const shareText = `Eu vou no ${event.title}! Confirme sua presença: ${eventUrl}`;
 
     // Marcar presença automaticamente antes de compartilhar (se ainda não marcado e evento não for passado)
     if (!isPast && !isGoing) {
+      console.log('[EventCard] handleShare toggling join ON before share');
       onToggleJoin?.(event.id, true);
     }
 
@@ -102,27 +134,30 @@ export default function EventCard({ event, isGoing, onToggleJoin }: EventCardPro
       try {
         const isImage = event.mediaType === 'image' && typeof event.mediaUrl === 'string' && event.mediaUrl.length > 0;
         if (!isImage) return false;
-
+        console.log('[EventCard] tryWebShareWithFile fetching media', event.mediaUrl);
         const response = await fetch(event.mediaUrl, { mode: 'cors' });
+        console.log('[EventCard] tryWebShareWithFile fetch status', response.status);
         if (!response.ok) return false;
         const blob = await response.blob();
         const fileName = `evento-${event.id}.jpg`;
         const fileType = blob.type || 'image/jpeg';
+        console.log('[EventCard] tryWebShareWithFile blob', { type: fileType, size: blob.size });
         const file = new File([blob], fileName, { type: fileType });
 
-        // @ts-expect-error canShare existe em navegadores que suportam Web Share Level 2
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            // @ts-expect-error share aceita files em navegadores compatíveis
+        if ((navigator as any).canShare && (navigator as any).canShare({ files: [file] })) {
+          console.log('[EventCard] navigator.canShare supports files, trying navigator.share(files)');
+          await (navigator as any).share({
             files: [file],
             title: event.title,
             text: shareText,
             url: eventUrl,
           });
+          console.log('[EventCard] navigator.share with files succeeded');
           return true;
         }
       } catch {
         // Ignorar e seguir para fallbacks
+        console.warn('[EventCard] tryWebShareWithFile failed');
       }
       return false;
     };
@@ -132,16 +167,20 @@ export default function EventCard({ event, isGoing, onToggleJoin }: EventCardPro
       const sharedWithFile = await tryWebShareWithFile();
       if (sharedWithFile) return;
       try {
+        console.log('[EventCard] navigator.share without files');
         await navigator.share({ title: event.title, text: shareText, url: eventUrl });
+        console.log('[EventCard] navigator.share without files succeeded');
         return;
       } catch {
         // Usuário pode ter cancelado; seguir para fallback
+        console.warn('[EventCard] navigator.share without files failed/cancelled');
       }
     }
 
     // Fallback: Abrir câmera de Stories do Instagram (se disponível) e copiar link
     const opened = openInstagramStory();
     const copied = await copyToClipboard(`${shareText}`);
+    console.log('[EventCard] fallback results', { openedInstagram: opened, copied });
     if (opened) {
       toast({
         title: 'Abra o Instagram',
@@ -158,7 +197,7 @@ export default function EventCard({ event, isGoing, onToggleJoin }: EventCardPro
         variant: 'default',
       });
       // Último recurso: abrir o Instagram no navegador
-      try { window.open('https://instagram.com', '_blank'); } catch {}
+      try { console.log('[EventCard] opening instagram.com as last resort'); window.open('https://instagram.com', '_blank'); } catch { console.warn('[EventCard] opening instagram.com failed'); }
     }
   };
 
