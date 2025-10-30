@@ -103,7 +103,7 @@ export default function MapaCalor() {
   const [selectedDate, setSelectedDate] = useState<Date>(brasiliaTime); // Padrão: Data atual
   const [selectedHour, setSelectedHour] = useState<number>(brasiliaTime.getHours()); // Padrão: Hora atual
   const [selectedType, setSelectedType] = useState<string>('all'); // Filtro de tipo
-  const [statusFilter, setStatusFilter] = useState<'all' | 'openOnly' | 'closed' | 'tranquilo' | 'moderado' | 'movimentado' | 'muitoCheio'>('openOnly'); // Filtro de status (default: Apenas abertos)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'openOnly' | 'closed' | 'tranquilo' | 'moderado' | 'movimentado' | 'muitoCheio'>('all'); // Filtro de status (default: Todos)
   const [minRating, setMinRating] = useState<number>(0); // Filtro de avaliação mínima
   const [filtersExpanded, setFiltersExpanded] = useState<boolean>(false); // Controle de expansão dos filtros - padrão fechado
 
@@ -257,10 +257,12 @@ export default function MapaCalor() {
   // Debug: Log quando places mudar
   useEffect(() => {
     console.log('[MapaCalor] Places atualizados:', places?.length || 0, 'lugares');
+    console.log('[MapaCalor] isLoading:', isLoading);
+    console.log('[MapaCalor] auth.currentUser:', !!auth.currentUser);
     if (places && places.length > 0) {
       console.log('[MapaCalor] Primeiro lugar:', places[0]);
     }
-  }, [places]);
+  }, [places, isLoading]);
 
   // Funções auxiliares - definidas antes dos useEffects
   const getDayLabel = (day: string): string => {
@@ -750,9 +752,13 @@ export default function MapaCalor() {
               Mapa de Calor - Santos
             </h1>
             <p className="text-sm text-gray-400 mt-1">
-              {filteredPlaces && filteredPlaces.length > 0 
-                ? `${filteredPlaces.length} de ${places?.length || 0} lugares`
-                : 'Carregando...'}
+              {isLoading 
+                ? 'Carregando...'
+                : filteredPlaces && filteredPlaces.length > 0 
+                  ? `${filteredPlaces.length} de ${places?.length || 0} lugares`
+                  : places && places.length === 0
+                    ? 'Nenhum lugar encontrado'
+                    : 'Carregando...'}
             </p>
           </div>
           
@@ -1060,7 +1066,7 @@ export default function MapaCalor() {
             </CardContent>
           </Card>
           
-          {/* Status (Apenas abertos) */}
+          {/* Status */}
           <Card className="bg-slate-700 border-slate-600">
             <CardContent className="p-4">
               <label className="text-sm text-gray-300 flex items-center gap-2 mb-2">
