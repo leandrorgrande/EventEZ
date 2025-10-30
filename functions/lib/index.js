@@ -1110,6 +1110,7 @@ const fetchPopularTimesFromSerpApi = async (name, address, placeIdRaw, lat, lng)
             const detailUrl = 'https://serpapi.com/search.json';
             const detailParams = { engine: 'google_maps_place', place_id: placeId, hl: 'pt-BR', gl: 'br', api_key: apiKey };
             const detailRes = await axios.get(detailUrl, { params: detailParams, timeout: 20000 });
+            console.log('[SerpApi] google_maps_place by place_id status:', detailRes.status, 'keys:', Object.keys(detailRes?.data || {}));
             detail = detailRes?.data;
         }
         // 2) Fallback: buscar pelo nome/endereço com google_maps search e, se vier data_id, pedir o place
@@ -1123,9 +1124,10 @@ const fetchPopularTimesFromSerpApi = async (name, address, placeIdRaw, lat, lng)
                 searchParams.ll = `@${lat},${lng},14z`;
             }
             const searchRes = await axios.get(searchUrl, { params: searchParams, timeout: 20000 });
+            console.log('[SerpApi] google_maps search status:', searchRes.status, 'has local_results?', Array.isArray(searchRes?.data?.local_results), 'length:', searchRes?.data?.local_results?.length || 0);
             firstLocal = searchRes?.data?.local_results?.[0];
             if (!firstLocal) {
-                const normalized = normalizePopularTimes(searchRes?.data?.popular_times);
+                const normalized = normalizePopularTimes(searchRes?.data?.popular_times || searchRes?.data?.place_results?.popular_times || searchRes?.data);
                 if (normalized)
                     return { popularTimes: normalized, openingHours: null, isOpen: null };
                 return null;
@@ -1135,6 +1137,7 @@ const fetchPopularTimesFromSerpApi = async (name, address, placeIdRaw, lat, lng)
                 const detailUrl = 'https://serpapi.com/search.json';
                 const detailParams = { engine: 'google_maps_place', data_id: dataId, hl: 'pt-BR', gl: 'br', api_key: apiKey };
                 const detailRes = await axios.get(detailUrl, { params: detailParams, timeout: 20000 });
+                console.log('[SerpApi] google_maps_place by data_id status:', detailRes.status, 'keys:', Object.keys(detailRes?.data || {}));
                 detail = detailRes?.data;
             }
         }
@@ -1144,7 +1147,7 @@ const fetchPopularTimesFromSerpApi = async (name, address, placeIdRaw, lat, lng)
         return { popularTimes: normalized, openingHours, isOpen };
     }
     catch (e) {
-        console.error('[Import] SerpApi error:', e?.response?.data || e?.message || e);
+        console.error('[Import] SerpApi error:', e?.response?.status, e?.response?.data || e?.message || e);
         return null;
     }
 };

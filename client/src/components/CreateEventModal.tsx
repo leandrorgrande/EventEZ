@@ -34,14 +34,14 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 
 // EVENTU: Enhanced validation schema with date checks
 const createEventSchema = z.object({
-  title: z.string().min(1, "Event title is required"),
+  title: z.string().min(1, "Título do evento é obrigatório"),
   description: z.string().optional(),
-  locationName: z.string().min(1, "Location is required"),
-  locationAddress: z.string().min(1, "Address is required"),
+  locationName: z.string().min(1, "Local é obrigatório"),
+  locationAddress: z.string().min(1, "Endereço é obrigatório"),
   googlePlaceId: z.string().optional(),
-  startDateTime: z.string().min(1, "Start date and time is required"),
+  startDateTime: z.string().min(1, "Data e hora de início são obrigatórias"),
   endDateTime: z.string().optional(),
-  eventType: z.string().min(1, "Event type is required"),
+  eventType: z.string().min(1, "Tipo de evento é obrigatório"),
   mediaFile: z.any().optional(),
 }).refine((data) => {
   // EVENTU: Validate end time is after start time
@@ -50,7 +50,7 @@ const createEventSchema = z.object({
   }
   return true;
 }, {
-  message: "End date must be after start date",
+  message: "Data de término deve ser após a data de início",
   path: ["endDateTime"],
 });
 
@@ -278,12 +278,12 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
     },
     onSuccess: () => {
       toast({
-        title: "Event Created",
-        description: "Your event has been created successfully!",
+        title: "Evento criado",
+        description: "Seu evento foi criado com sucesso!",
       });
       
-      // Invalidate and refetch events
-      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      // Atualizar lista de eventos
+      queryClient.invalidateQueries({ queryKey: ["api/events"] });
       
       // Close modal and reset form
       onOpenChange(false);
@@ -292,8 +292,8 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
     onError: (error: Error) => {
       if (isUnauthorizedError(error)) {
         toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
+          title: "Não autorizado",
+          description: "Sua sessão expirou. Redirecionando para login...",
           variant: "destructive",
         });
         setTimeout(() => {
@@ -303,8 +303,8 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
       }
       
       toast({
-        title: "Error",
-        description: "Failed to create event. Please try again.",
+        title: "Erro",
+        description: "Falha ao criar evento. Tente novamente.",
         variant: "destructive",
       });
     },
@@ -318,9 +318,9 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-md">
         <DialogHeader>
-          <DialogTitle data-testid="text-create-event-title">Create Event</DialogTitle>
+          <DialogTitle data-testid="text-create-event-title">Criar Evento</DialogTitle>
           <DialogDescription className="text-gray-400">
-            Create a new event for others to discover and join
+            Cadastre um novo evento para outros descobrirem e participarem
           </DialogDescription>
         </DialogHeader>
 
@@ -331,10 +331,10 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-gray-300">Event Title</FormLabel>
+                  <FormLabel className="text-gray-300">Título do evento</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="Enter event title"
+                      placeholder="Digite o título do evento"
                       className="bg-slate-700 border-slate-600 text-white placeholder-gray-400"
                       data-testid="input-event-title"
                       {...field}
@@ -350,11 +350,11 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
               name="locationName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-gray-300">Location</FormLabel>
+                  <FormLabel className="text-gray-300">Local</FormLabel>
                   <FormControl>
                     <div className="relative">
                       <Input
-                        placeholder="Search for a place..."
+                        placeholder="Busque um local..."
                         className="bg-slate-700 border-slate-600 text-white placeholder-gray-400"
                         data-testid="input-location-search"
                         onChange={(e) => {
@@ -419,7 +419,7 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
                 name="startDateTime"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-gray-300">Start Date & Time</FormLabel>
+                    <FormLabel className="text-gray-300">Data e hora de início</FormLabel>
                     <FormControl>
                       <Input
                         type="datetime-local"
@@ -438,7 +438,7 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
                 name="endDateTime"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-gray-300">End Date & Time</FormLabel>
+                    <FormLabel className="text-gray-300">Data e hora de término</FormLabel>
                     <FormControl>
                       <Input
                         type="datetime-local"
@@ -458,20 +458,20 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
               name="eventType"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-gray-300">Event Type</FormLabel>
+                  <FormLabel className="text-gray-300">Tipo de evento</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger className="bg-slate-700 border-slate-600 text-white" data-testid="select-event-type">
-                        <SelectValue placeholder="Select event type" />
+                        <SelectValue placeholder="Selecione o tipo" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent className="bg-slate-700 border-slate-600">
-                      <SelectItem value="clubs">Club Night</SelectItem>
-                      <SelectItem value="bars">Bar Event</SelectItem>
-                      <SelectItem value="shows">Live Show</SelectItem>
-                      <SelectItem value="fairs">Fair/Market</SelectItem>
-                      <SelectItem value="food">Food Event</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
+                      <SelectItem value="clubs">Baladas</SelectItem>
+                      <SelectItem value="bars">Bares</SelectItem>
+                      <SelectItem value="shows">Shows</SelectItem>
+                      <SelectItem value="fairs">Feiras</SelectItem>
+                      <SelectItem value="food">Comida</SelectItem>
+                      <SelectItem value="other">Outros</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -484,10 +484,10 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-gray-300">Description</FormLabel>
+                  <FormLabel className="text-gray-300">Descrição</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Tell people about your event..."
+                      placeholder="Conte sobre o seu evento..."
                       className="bg-slate-700 border-slate-600 text-white placeholder-gray-400 resize-none"
                       rows={3}
                       data-testid="textarea-event-description"
@@ -505,7 +505,7 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
               name="mediaFile"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-gray-300">Event Photo/Video</FormLabel>
+                  <FormLabel className="text-gray-300">Foto/Vídeo do evento</FormLabel>
                   <FormControl>
                     <div className="space-y-3">
                       <Input
@@ -520,7 +520,7 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
                           {form.getValues("mediaFile")?.type?.startsWith("image/") ? (
                             <img
                               src={mediaPreview}
-                              alt="Event preview"
+                              alt="Prévia do evento"
                               className="w-full h-32 object-cover rounded-lg"
                             />
                           ) : (
@@ -558,7 +558,7 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
                 className="flex-1 bg-gray-600 hover:bg-gray-700"
                 data-testid="button-cancel-event"
               >
-                Cancel
+                Cancelar
               </Button>
               <Button
                 type="submit"
@@ -566,7 +566,7 @@ export default function CreateEventModal({ open, onOpenChange }: CreateEventModa
                 className="flex-1 bg-blue-600 hover:bg-blue-700"
                 data-testid="button-submit-event"
               >
-                {createEventMutation.isPending ? "Creating..." : "Create Event"}
+                {createEventMutation.isPending ? "Criando..." : "Criar Evento"}
               </Button>
             </div>
           </form>
