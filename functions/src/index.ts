@@ -1436,11 +1436,11 @@ app.post('/places/popular-times/import-once', authenticate, async (req: express.
           log(`Fallback scraping: popularTimes=${!!popularTimes}`);
         }
         // Considerar sucesso apenas se for SERPAPI e vierem ambos popularTimes e openingHours
-        const success = !!(fromSerp && fromSerp.popularTimes && fromSerp.openingHours);
+        const success = !!(fromSerp && (fromSerp.popularTimes || fromSerp.openingHours));
         if (success) {
           await place.docRef.update({
-            popularTimes: fromSerp!.popularTimes,
-            openingHours: fromSerp!.openingHours,
+            ...(fromSerp!.popularTimes ? { popularTimes: fromSerp!.popularTimes } : {}),
+            ...(fromSerp!.openingHours ? { openingHours: fromSerp!.openingHours } : {}),
             ...(isOpen !== null ? { isOpen } : {}),
             ...(fromSerp?.price ? { price: fromSerp.price } : {}),
             dataSource: 'serpapi',
@@ -1506,16 +1506,16 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req: expres
       log(`SerpApi: popularTimes=${!!popularTimes}, openingHours=${!!openingHours}, isOpen=${isOpen}`);
     }
     // Somente considerar SUCESSO se vierem popularTimes E openingHours do SerpApi
-    const success = !!(fromSerp && fromSerp.popularTimes && fromSerp.openingHours);
+    const success = !!(fromSerp && (fromSerp.popularTimes || fromSerp.openingHours));
     if (!success) {
-      log('Falha: API não retornou conjunto completo (popularTimes + openingHours). Nenhuma atualização foi aplicada.');
+      log('API não retornou dados suficientes');
       res.status(502).json({ message: 'API não retornou dados suficientes', logs: logMessages });
       return;
     }
 
-  await ref.update({
-      popularTimes: fromSerp!.popularTimes,
-      openingHours: fromSerp!.openingHours,
+    await ref.update({
+      ...(fromSerp!.popularTimes ? { popularTimes: fromSerp!.popularTimes } : {}),
+      ...(fromSerp!.openingHours ? { openingHours: fromSerp!.openingHours } : {}),
       ...(isOpen !== null ? { isOpen } : {}),
       ...(fromSerp?.price ? { price: fromSerp.price } : {}),
       dataSource: 'serpapi',
