@@ -55,6 +55,38 @@ export default function Admin() {
     }
   });
 
+  // Controles de filtro/ordenação/paginação para Places
+  const [placesFilter, setPlacesFilter] = useState<'all' | 'semTipo' | 'comTipo'>('all');
+  const [placesSort, setPlacesSort] = useState<'none' | 'manual_desc' | 'auto_desc' | 'manual_asc' | 'auto_asc'>('none');
+  const [compactView, setCompactView] = useState<boolean>(true);
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(24);
+
+  const filteredSortedPlaces = Array.isArray(allPlaces) ? allPlaces
+    .filter((p: any) => {
+      if (placesFilter === 'semTipo') return !(p.types && p.types.length);
+      if (placesFilter === 'comTipo') return (p.types && p.types.length);
+      return true;
+    })
+    .slice()
+    .sort((a: any, b: any) => {
+      const aAuto = a.popularityAutoUpdatedAt?._seconds || 0;
+      const bAuto = b.popularityAutoUpdatedAt?._seconds || 0;
+      const aManual = a.popularityManualUpdatedAt?._seconds || 0;
+      const bManual = b.popularityManualUpdatedAt?._seconds || 0;
+      switch (placesSort) {
+        case 'manual_desc': return bManual - aManual;
+        case 'manual_asc': return aManual - bManual;
+        case 'auto_desc': return bAuto - aAuto;
+        case 'auto_asc': return aAuto - bAuto;
+        default: return 0;
+      }
+    }) : [];
+
+  const totalPages = Math.max(1, Math.ceil(filteredSortedPlaces.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageItems = filteredSortedPlaces.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   const deletePlaceMutation = useMutation({
     mutationFn: async (docId: string) => {
       const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
@@ -551,51 +583,106 @@ export default function Admin() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap items-center">
                   <Button onClick={() => importSerpApiMutation.mutate()} disabled={serpImporting} className="bg-blue-600 hover:bg-blue-700">
                     {serpImporting ? <><Clock className="h-4 w-4 mr-2 animate-spin"/>Importando...</> : <><Download className="h-4 w-4 mr-2"/>Importar Popular Times (bulk)</>}
                   </Button>
+                  {/* Filtro Tipo */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-300">Filtro:</span>
+                    <Select value={placesFilter} onValueChange={(v) => { setPage(1); setPlacesFilter(v as any); }}>
+                      <SelectTrigger className="h-8 bg-slate-600 border-slate-500 text-white w-40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-700 border-slate-600 text-white">
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="semTipo">Sem tipo</SelectItem>
+                        <SelectItem value="comTipo">Com tipo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {/* Ordenação */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-300">Ordenar por:</span>
+                    <Select value={placesSort} onValueChange={(v) => { setPage(1); setPlacesSort(v as any); }}>
+                      <SelectTrigger className="h-8 bg-slate-600 border-slate-500 text-white w-52">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-700 border-slate-600 text-white">
+                        <SelectItem value="none">Sem ordenação</SelectItem>
+                        <SelectItem value="manual_desc">Manual: mais recente</SelectItem>
+                        <SelectItem value="manual_asc">Manual: mais antigo</SelectItem>
+                        <SelectItem value="auto_desc">Auto: mais recente</SelectItem>
+                        <SelectItem value="auto_asc">Auto: mais antigo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {/* Tamanho da página */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-300">Por página:</span>
+                    <Select value={String(pageSize)} onValueChange={(v) => { setPage(1); setPageSize(Number(v)); }}>
+                      <SelectTrigger className="h-8 bg-slate-600 border-slate-500 text-white w-24">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-700 border-slate-600 text-white">
+                        <SelectItem value="12">12</SelectItem>
+                        <SelectItem value="24">24</SelectItem>
+                        <SelectItem value="48">48</SelectItem>
+                        <SelectItem value="96">96</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {/* Modo compacto */}
+                  <Button 
+                    variant="secondary" 
+                    className="h-8"
+                    onClick={() => setCompactView(v => !v)}
+                  >
+                    {compactView ? 'Detalhar' : 'Compactar'}
+                  </Button>
                 </div>
-                {Array.isArray(allPlaces) && allPlaces.length > 0 ? (
+                {Array.isArray(pageItems) && pageItems.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {allPlaces
-                      .slice()
-                      .sort((a: any, b: any) => {
-                        const aTs = a.popularityAutoUpdatedAt?._seconds ? a.popularityAutoUpdatedAt._seconds : 0;
-                        const bTs = b.popularityAutoUpdatedAt?._seconds ? b.popularityAutoUpdatedAt._seconds : 0;
-                        if (!aTs && bTs) return -1;
-                        if (aTs && !bTs) return 1;
-                        return aTs - bTs;
-                      })
-                      .map((p: any) => (
+                    {pageItems.map((p: any) => (
                       <div key={p.id} className="p-3 bg-slate-700/50 rounded border border-slate-600">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="text-white font-semibold truncate">{p.name}</div>
                             <div className="text-xs text-gray-400 truncate">{p.formattedAddress || ''}</div>
-                            <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-300">
-                              <div>Fonte: <span className="text-gray-200">{p.popularityProvider || p.dataSource || '—'}</span></div>
-                              <div>Auto done: <span className="text-gray-200">{p.popularityAutoDone ? 'sim' : 'não'}</span></div>
-                              <div>Auto em: <span className="text-gray-200">{p.popularityAutoUpdatedAt?._seconds ? new Date(p.popularityAutoUpdatedAt._seconds*1000).toLocaleString('pt-BR') : '—'}</span></div>
-                              <div>Manual em: <span className="text-gray-200">{p.popularityManualUpdatedAt?._seconds ? new Date(p.popularityManualUpdatedAt._seconds*1000).toLocaleString('pt-BR') : '—'}</span></div>
-                            </div>
-                            <div className="mt-2 flex items-center gap-2">
-                              <span className="text-xs text-gray-300">Tipo:</span>
-                              <Select value={(p.types?.[0]) || ''} onValueChange={(v) => updateTypesMutation.mutate({ docId: p.id, types: [v] })}>
-                                <SelectTrigger className="h-8 bg-slate-600 border-slate-500 text-white w-40">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="bg-slate-700 border-slate-600 text-white">
-                                  <SelectItem value="bar">bar</SelectItem>
-                                  <SelectItem value="night_club">night_club</SelectItem>
-                                  <SelectItem value="restaurant">restaurant</SelectItem>
-                                  <SelectItem value="cafe">cafe</SelectItem>
-                                  <SelectItem value="bakery">bakery</SelectItem>
-                                  <SelectItem value="movie_theater">movie_theater</SelectItem>
-                                  <SelectItem value="amusement_park">amusement_park</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
+                            {compactView ? (
+                              <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-300">
+                                <div>Fonte: <span className="text-gray-200">{p.popularityProvider || p.dataSource || '—'}</span></div>
+                                <div>Tipo: <span className="text-gray-200">{p.types?.[0] || '—'}</span></div>
+                                <div>Auto: <span className="text-gray-200">{p.popularityAutoUpdatedAt?._seconds ? new Date(p.popularityAutoUpdatedAt._seconds*1000).toLocaleDateString('pt-BR') : '—'}</span></div>
+                                <div>Manual: <span className="text-gray-200">{p.popularityManualUpdatedAt?._seconds ? new Date(p.popularityManualUpdatedAt._seconds*1000).toLocaleDateString('pt-BR') : '—'}</span></div>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-300">
+                                  <div>Fonte: <span className="text-gray-200">{p.popularityProvider || p.dataSource || '—'}</span></div>
+                                  <div>Auto done: <span className="text-gray-200">{p.popularityAutoDone ? 'sim' : 'não'}</span></div>
+                                  <div>Auto em: <span className="text-gray-200">{p.popularityAutoUpdatedAt?._seconds ? new Date(p.popularityAutoUpdatedAt._seconds*1000).toLocaleString('pt-BR') : '—'}</span></div>
+                                  <div>Manual em: <span className="text-gray-200">{p.popularityManualUpdatedAt?._seconds ? new Date(p.popularityManualUpdatedAt._seconds*1000).toLocaleString('pt-BR') : '—'}</span></div>
+                                </div>
+                                <div className="mt-2 flex items-center gap-2">
+                                  <span className="text-xs text-gray-300">Tipo:</span>
+                                  <Select value={(p.types?.[0]) || ''} onValueChange={(v) => updateTypesMutation.mutate({ docId: p.id, types: [v] })}>
+                                    <SelectTrigger className="h-8 bg-slate-600 border-slate-500 text-white w-40">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-slate-700 border-slate-600 text-white">
+                                      <SelectItem value="bar">bar</SelectItem>
+                                      <SelectItem value="night_club">night_club</SelectItem>
+                                      <SelectItem value="restaurant">restaurant</SelectItem>
+                                      <SelectItem value="cafe">cafe</SelectItem>
+                                      <SelectItem value="bakery">bakery</SelectItem>
+                                      <SelectItem value="movie_theater">movie_theater</SelectItem>
+                                      <SelectItem value="amusement_park">amusement_park</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </>
+                            )}
                           </div>
                           <div className="flex flex-col gap-2 flex-shrink-0">
                             <Button variant="secondary" size="sm" onClick={() => importOnePopularityMutation.mutate({ docId: p.id, apiKey: serpApiKey || undefined })}>
@@ -613,6 +700,27 @@ export default function Admin() {
                 ) : (
                   <div className="text-center text-gray-400">Nenhum lugar encontrado</div>
                 )}
+
+                {/* Paginação */}
+                <div className="flex items-center justify-between pt-2">
+                  <div className="text-xs text-gray-400">
+                    Página {currentPage} de {totalPages} • {filteredSortedPlaces.length} lugares
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      size="sm"
+                      variant="outline"
+                      disabled={currentPage <= 1}
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                    >Anterior</Button>
+                    <Button 
+                      size="sm"
+                      variant="outline"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    >Próxima</Button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

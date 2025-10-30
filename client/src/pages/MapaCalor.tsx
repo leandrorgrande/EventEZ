@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { auth } from "@/lib/firebase";
@@ -76,6 +76,7 @@ export default function MapaCalor() {
   const [markers, setMarkers] = useState<any[]>([]);
   const [eventMarkers, setEventMarkers] = useState<any[]>([]);
   const [customOverlays, setCustomOverlays] = useState<any[]>([]);
+  const [mapBounds, setMapBounds] = useState<any>(null); // Bounds atuais do mapa
   const markersMap = useRef<Map<string, { marker: any; infoWindow: any }>>(new Map()); // Mapa de placeId -> marker/infoWindow
   const mapRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -390,7 +391,29 @@ export default function MapaCalor() {
         ]
       });
 
-      setMap(mapInstance);
+      // Salvar bounds iniciais
+      const bounds = mapInstance.getBounds();
+      if (bounds) {
+        setMapBounds(bounds);
+      }
+
+      // Debounce para bounds_changed (esperar 300ms após parar de mover)
+      let boundsTimeout: any;
+      const boundsListener = mapInstance.addListener('bounds_changed', () => {
+        clearTimeout(boundsTimeout);
+        boundsTimeout = setTimeout(() => {
+          const newBounds = mapInstance.getBounds();
+          if (newBounds) {
+            setMapBounds(newBounds);
+          }
+        }, 300); // Aguarda 300ms após parar de mover
+      });
+
+      // Cleanup listener quando componente desmontar
+      return () => {
+        clearTimeout(boundsTimeout);
+        google.maps.event.removeListener(boundsListener);
+      };
     };
 
     loadGoogleMaps();
@@ -420,9 +443,20 @@ export default function MapaCalor() {
     const newCustomOverlays: any[] = [];
 
     // Renderizar lugares (heatmap + marcadores por popularidade/fechado)
-    if (filteredPlaces && filteredPlaces.length > 0) {
+    // Apenas renderizar lugares visíveis no mapa (dentro dos bounds)
+    if (filteredPlaces && filteredPlaces.length > 0 && mapBounds) {
       filteredPlaces.forEach(place => {
       if (!place.latitude || !place.longitude) return;
+
+      // Verificar se o lugar está dentro dos bounds do mapa
+      const location = new (google as any).maps.LatLng(
+        parseFloat(place.latitude.toString()),
+        parseFloat(place.longitude.toString())
+      );
+      
+      if (!mapBounds.contains(location)) {
+        return; // Pular lugares fora da viewport
+      }
 
       const dayKey = selectedDay;
       // Checar fechado o dia todo e disponibilidade de popularidade
@@ -431,12 +465,6 @@ export default function MapaCalor() {
       const hasPopularity = rawPopularity !== undefined;
       const popularity = hasPopularity ? rawPopularity : 0;
       // popularidade calculada; fechado o dia todo controlado por isClosedAllDay
-
-      // Adicionar ao heatmap com peso baseado na popularidade
-      const location = new (google as any).maps.LatLng(
-        parseFloat(place.latitude.toString()),
-        parseFloat(place.longitude.toString())
-      );
 
       // Peso: popularidade / 100 (normalizado para 0-1)
       const weight = popularity / 100;
@@ -730,7 +758,7 @@ export default function MapaCalor() {
     return () => {
       google.maps.event.removeListener(mapClickListener);
     };
-  }, [map, places, events, selectedDay, selectedHour, selectedType, selectedCity, minRating, statusFilter]);
+  }, [map, places, events, selectedDay, selectedHour, selectedType, selectedCity, minRating, statusFilter, mapBounds]);
 
   // Funções auxiliares
   const getColorByPopularity = (popularity: number): string => {
