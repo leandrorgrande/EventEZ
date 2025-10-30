@@ -441,13 +441,8 @@ export default function MapaCalor() {
         heatmapData.push({ location, weight });
       }
 
-      // Adicionar marcador: se fechado (dia todo) ou se HÁ um valor de popularidade (inclui 0 = Tranquilo)
-      if (isClosedAllDay || hasPopularity) {
-        // Otimização: renderizar marcador apenas se estiver dentro dos bounds visíveis
-        const bounds = map.getBounds?.();
-        if (bounds && !bounds.contains(location)) {
-          // Fora de tela: não cria marcador (mas mantém no heatmap)
-        } else {
+      // Adicionar marcador para todos os lugares filtrados (padronizado)
+      {
         // Escala do marcador: padronizar todos (exceto evento) para o tamanho de "Tranquilo"
         const baseScale = 6;
         const finalScale = baseScale;
@@ -526,7 +521,6 @@ export default function MapaCalor() {
         markersMap.current.set(place.id, { marker, infoWindow: contentHtml as any });
 
         newMarkers.push(marker);
-        }
       }
       });
     }
