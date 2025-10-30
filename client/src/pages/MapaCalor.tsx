@@ -391,6 +391,9 @@ export default function MapaCalor() {
         ]
       });
 
+      // Garantir que o estado do mapa seja definido para habilitar renderização de heatmap e marcadores
+      setMap(mapInstance);
+
       // Salvar bounds iniciais
       const bounds = mapInstance.getBounds();
       if (bounds) {
