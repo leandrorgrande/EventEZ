@@ -69,9 +69,7 @@ const db = admin.firestore();
 // Buscar places com filtros e paginação
 app.get('/places', async (req, res) => {
     try {
-        const { name, type, hasType, city, district, page = '1', pageSize = '10' } = req.query;
-        const p = Math.max(1, parseInt(page, 10) || 1);
-        const ps = Math.max(1, Math.min(50, parseInt(pageSize, 10) || 10));
+        const { name, type, hasType, city, district } = req.query;
         const snap = await db.collection('places').get();
         let places = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         // Filtros em memória (simplificado)
@@ -95,10 +93,8 @@ app.get('/places', async (req, res) => {
             const q = String(district).toLowerCase();
             places = places.filter(p => (p.district || p.neighborhood || p.formattedAddress || '').toLowerCase().includes(q));
         }
-        const total = places.length;
-        const start = (p - 1) * ps;
-        const pageItems = places.slice(start, start + ps);
-        res.json({ total, page: p, pageSize: ps, items: pageItems });
+        // Retornar array direto para compatibilidade com frontend existente
+        res.json(places);
     }
     catch (error) {
         console.error('[API] Erro ao buscar places com filtros:', error);
