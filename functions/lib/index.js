@@ -38,11 +38,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.api = void 0;
 const https_1 = require("firebase-functions/v2/https");
+const params_1 = require("firebase-functions/params");
 const admin = __importStar(require("firebase-admin"));
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const cheerio = __importStar(require("cheerio"));
 admin.initializeApp();
+// Secret para SerpApi (injetado como variável de ambiente)
+const SERPAPI_API_KEY = (0, params_1.defineSecret)('SERPAPI_API_KEY');
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({ origin: true }));
 app.use(express_1.default.json());
@@ -1397,11 +1400,11 @@ app.post('/places/popular-times/import-once', authenticate, async (req, res) => 
                     log(`Fallback scraping: popularTimes=${!!popularTimes}`);
                 }
                 // Considerar sucesso apenas se for SERPAPI e vierem ambos popularTimes e openingHours
-                const success = !!(fromSerp && fromSerp.popularTimes && fromSerp.openingHours);
+                const success = !!(fromSerp && (fromSerp.popularTimes || fromSerp.openingHours));
                 if (success) {
                     await place.docRef.update({
-                        popularTimes: fromSerp.popularTimes,
-                        openingHours: fromSerp.openingHours,
+                        ...(fromSerp.popularTimes ? { popularTimes: fromSerp.popularTimes } : {}),
+                        ...(fromSerp.openingHours ? { openingHours: fromSerp.openingHours } : {}),
                         ...(isOpen !== null ? { isOpen } : {}),
                         ...(fromSerp?.price ? { price: fromSerp.price } : {}),
                         dataSource: 'serpapi',
@@ -1464,15 +1467,15 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req, res) =
             log(`SerpApi: popularTimes=${!!popularTimes}, openingHours=${!!openingHours}, isOpen=${isOpen}`);
         }
         // Somente considerar SUCESSO se vierem popularTimes E openingHours do SerpApi
-        const success = !!(fromSerp && fromSerp.popularTimes && fromSerp.openingHours);
+        const success = !!(fromSerp && (fromSerp.popularTimes || fromSerp.openingHours));
         if (!success) {
-            log('Falha: API não retornou conjunto completo (popularTimes + openingHours). Nenhuma atualização foi aplicada.');
+            log('API não retornou dados suficientes');
             res.status(502).json({ message: 'API não retornou dados suficientes', logs: logMessages });
             return;
         }
         await ref.update({
-            popularTimes: fromSerp.popularTimes,
-            openingHours: fromSerp.openingHours,
+            ...(fromSerp.popularTimes ? { popularTimes: fromSerp.popularTimes } : {}),
+            ...(fromSerp.openingHours ? { openingHours: fromSerp.openingHours } : {}),
             ...(isOpen !== null ? { isOpen } : {}),
             ...(fromSerp?.price ? { price: fromSerp.price } : {}),
             dataSource: 'serpapi',
@@ -1973,5 +1976,5 @@ app.post('/places/scrape-popular-times', authenticate, async (req, res) => {
     }
 });
 // Export all functions
-exports.api = (0, https_1.onRequest)({ region: 'us-central1' }, app);
+exports.api = (0, https_1.onRequest)({ region: 'us-central1', secrets: [SERPAPI_API_KEY] }, app);
 //# sourceMappingURL=index.js.map

@@ -76,7 +76,6 @@ export default function MapaCalor() {
   const [markers, setMarkers] = useState<any[]>([]);
   const [eventMarkers, setEventMarkers] = useState<any[]>([]);
   const [customOverlays, setCustomOverlays] = useState<any[]>([]);
-  const [mapBounds, setMapBounds] = useState<any>(null); // Bounds atuais do mapa
   const markersMap = useRef<Map<string, { marker: any; infoWindow: any }>>(new Map()); // Mapa de placeId -> marker/infoWindow
   const mapRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -394,29 +393,7 @@ export default function MapaCalor() {
       // Garantir que o estado do mapa seja definido para habilitar renderização de heatmap e marcadores
       setMap(mapInstance);
 
-      // Salvar bounds iniciais
-      const bounds = mapInstance.getBounds();
-      if (bounds) {
-        setMapBounds(bounds);
-      }
-
-      // Debounce para bounds_changed (esperar 300ms após parar de mover)
-      let boundsTimeout: any;
-      const boundsListener = mapInstance.addListener('bounds_changed', () => {
-        clearTimeout(boundsTimeout);
-        boundsTimeout = setTimeout(() => {
-          const newBounds = mapInstance.getBounds();
-          if (newBounds) {
-            setMapBounds(newBounds);
-          }
-        }, 300); // Aguarda 300ms após parar de mover
-      });
-
-      // Cleanup listener quando componente desmontar
-      return () => {
-        clearTimeout(boundsTimeout);
-        google.maps.event.removeListener(boundsListener);
-      };
+      // Sem listeners de bounds: renderização controlada apenas pelos filtros (ex.: Cidade)
     };
 
     loadGoogleMaps();
@@ -445,21 +422,15 @@ export default function MapaCalor() {
     const newEventMarkers: any[] = [];
     const newCustomOverlays: any[] = [];
 
-    // Renderizar lugares (heatmap + marcadores por popularidade/fechado)
-    // Apenas renderizar lugares visíveis no mapa (dentro dos bounds)
-    if (filteredPlaces && filteredPlaces.length > 0 && mapBounds) {
+    // Renderizar lugares (heatmap + marcadores por popularidade/fechado) baseado nos filtros
+    if (filteredPlaces && filteredPlaces.length > 0) {
       filteredPlaces.forEach(place => {
       if (!place.latitude || !place.longitude) return;
 
-      // Verificar se o lugar está dentro dos bounds do mapa
       const location = new (google as any).maps.LatLng(
         parseFloat(place.latitude.toString()),
         parseFloat(place.longitude.toString())
       );
-      
-      if (!mapBounds.contains(location)) {
-        return; // Pular lugares fora da viewport
-      }
 
       const dayKey = selectedDay;
       // Checar fechado o dia todo e disponibilidade de popularidade
@@ -761,7 +732,7 @@ export default function MapaCalor() {
     return () => {
       google.maps.event.removeListener(mapClickListener);
     };
-  }, [map, places, events, selectedDay, selectedHour, selectedType, selectedCity, minRating, statusFilter, mapBounds]);
+  }, [map, places, events, selectedDay, selectedHour, selectedType, selectedCity, minRating, statusFilter]);
 
   // Funções auxiliares
   const getColorByPopularity = (popularity: number): string => {
