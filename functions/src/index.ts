@@ -1055,9 +1055,27 @@ const normalizePopularTimes = (raw: any): any | null => {
 
   // setHour já definido acima
 
-  // 1) Novo formato SerpApi (Place Results): detail.place_results.popular_times.{day} = [{ time, busyness_score, ... }]
+  // 1) Novo formato SerpApi (Place Results)
+  //    a) detail.place_results.popular_times.graph_results.{day} = [{ time, busyness_score, ... }]
+  //    b) detail.place_results.popular_times.{day} = [...]
   const placeResults = raw.place_results || undefined;
   const prPopularTimes = placeResults?.popular_times || undefined;
+  const prGraph = prPopularTimes?.graph_results || undefined;
+  if (prGraph && typeof prGraph === 'object') {
+    for (const key of Object.keys(prGraph)) {
+      const day = mapDayName(key) as string | null;
+      if (!day || !dayKeys.includes(day)) continue;
+      const arr: any[] = Array.isArray(prGraph[key]) ? prGraph[key] : [];
+      arr.forEach((entry, idx) => {
+        const hour = parseHour(entry?.time, idx);
+        const value = typeof entry?.busyness_score === 'number' ? entry.busyness_score
+          : (typeof entry?.busy_percent === 'number' ? entry.busy_percent
+            : (typeof entry?.value === 'number' ? entry.value : 0));
+        setHour(day, hour, value);
+      });
+    }
+    return out;
+  }
   if (prPopularTimes && typeof prPopularTimes === 'object') {
     for (const key of Object.keys(prPopularTimes)) {
       const day = mapDayName(key) as string | null;
@@ -1108,6 +1126,23 @@ const normalizePopularTimes = (raw: any): any | null => {
         });
       }
     });
+    return out;
+  }
+  // 5) Alternativo: raw.popular_times.graph_results
+  const rawGraph = raw?.popular_times?.graph_results;
+  if (rawGraph && typeof rawGraph === 'object') {
+    for (const key of Object.keys(rawGraph)) {
+      const day = mapDayName(key) as string | null;
+      if (!day || !dayKeys.includes(day)) continue;
+      const arr: any[] = Array.isArray(rawGraph[key]) ? rawGraph[key] : [];
+      arr.forEach((entry, idx) => {
+        const hour = parseHour(entry?.time, idx);
+        const value = typeof entry?.busyness_score === 'number' ? entry.busyness_score
+          : (typeof entry?.busy_percent === 'number' ? entry.busy_percent
+            : (typeof entry?.value === 'number' ? entry.value : 0));
+        setHour(day, hour, value);
+      });
+    }
     return out;
   }
   return null;
@@ -1173,7 +1208,67 @@ const normalizeOpeningHoursFromSerpApi = (detail: any): any | null => {
     }
     return result;
   } catch {
-    return null;
+    // Fallback: Place Results -> hours: [{ monday: "6:30AM–5PM" }, ...]
+    try {
+      const hoursArr = detail?.place_results?.hours || detail?.hours;
+      if (!Array.isArray(hoursArr)) return null;
+      const result: any = {
+        monday: null,
+        tuesday: null,
+        wednesday: null,
+        thursday: null,
+        friday: null,
+        saturday: null,
+        sunday: null,
+      };
+      const to24 = (s: string): string | null => {
+        if (!s) return null;
+        const m1 = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+        if (m1) {
+          let h = parseInt(m1[1], 10);
+          const min = m1[2] ? parseInt(m1[2], 10) : 0;
+          const ap = m1[3].toUpperCase();
+          if (ap === 'PM' && h !== 12) h += 12;
+          if (ap === 'AM' && h === 12) h = 0;
+          return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+        }
+        const m2 = s.match(/^(\d{1,2}):(\d{2})$/);
+        if (m2) return `${m2[1].padStart(2, '0')}:${m2[2]}`;
+        return null;
+      };
+      const mapDay = (d: string): string | null => {
+        const s = d.toLowerCase();
+        if (s.startsWith('mon')) return 'monday';
+        if (s.startsWith('tue')) return 'tuesday';
+        if (s.startsWith('wed')) return 'wednesday';
+        if (s.startsWith('thu')) return 'thursday';
+        if (s.startsWith('fri')) return 'friday';
+        if (s.startsWith('sat')) return 'saturday';
+        if (s.startsWith('sun')) return 'sunday';
+        return null;
+      };
+      for (const obj of hoursArr) {
+        if (!obj || typeof obj !== 'object') continue;
+        const dayKey = Object.keys(obj)[0];
+        if (!dayKey) continue;
+        const normDay = mapDay(dayKey);
+        if (!normDay) continue;
+        const txt = String(obj[dayKey] || '').trim();
+        if (!txt || /fechad|closed/i.test(txt)) {
+          result[normDay] = { open: null, close: null, closed: true };
+          continue;
+        }
+        const m = txt.match(/([\d: ]+(?:AM|PM)?)\s*[–-]\s*([\d: ]+(?:AM|PM)?)/i);
+        if (m) {
+          const open = to24(m[1]);
+          const close = to24(m[2]);
+          result[normDay] = { open, close, closed: false };
+        }
+      }
+      return result;
+    } catch {
+      return null;
+    }
   }
 };
 
@@ -1183,7 +1278,7 @@ const fetchPopularTimesFromSerpApi = async (
   placeIdRaw?: string | null,
   lat?: number | null,
   lng?: number | null,
-): Promise<{ popularTimes: any | null; openingHours: any | null; isOpen: boolean | null } | null> => {
+): Promise<{ popularTimes: any | null; openingHours: any | null; isOpen: boolean | null; price?: string | null } | null> => {
   try {
     const axios = require('axios');
     const apiKey = process.env.SERPAPI_API_KEY;
@@ -1221,16 +1316,32 @@ const fetchPopularTimesFromSerpApi = async (
       const dataId = firstLocal?.data_id;
       if (dataId) {
         const detailUrl = 'https://serpapi.com/search.json';
-        const detailParams = { engine: 'google_maps_place', data_id: dataId, hl: 'pt-BR', gl: 'br', api_key: apiKey } as any;
+        // Preferido: engine=google_maps com type=place e data codificado
+        const dLat = (typeof lat === 'number') ? lat : (firstLocal?.gps_coordinates?.latitude ?? undefined);
+        const dLng = (typeof lng === 'number') ? lng : (firstLocal?.gps_coordinates?.longitude ?? undefined);
+        const dataParam = (typeof dLat === 'number' && typeof dLng === 'number')
+          ? `!4m5!3m4!1s${dataId}!8m2!3d${dLat}!4d${dLng}`
+          : `!4m5!3m4!1s${dataId}!8m2`;
+        const detailParams: any = { engine: 'google_maps', type: 'place', data: dataParam, hl: 'pt-BR', gl: 'br', api_key: apiKey };
         const detailRes = await axios.get(detailUrl, { params: detailParams, timeout: 20000 });
-        console.log('[SerpApi] google_maps_place by data_id status:', detailRes.status, 'keys:', Object.keys(detailRes?.data || {}));
-        detail = detailRes?.data;
+        console.log('[SerpApi] google_maps type=place by data param status:', detailRes.status, 'has place_results?', !!detailRes?.data?.place_results);
+        detail = detailRes?.data?.place_results ? detailRes?.data : detailRes?.data;
+        // Fallback para google_maps_place com data_id
+        if (!detail?.place_results) {
+          const fallbackParams = { engine: 'google_maps_place', data_id: dataId, hl: 'pt-BR', gl: 'br', api_key: apiKey } as any;
+          const fbRes = await axios.get(detailUrl, { params: fallbackParams, timeout: 20000 });
+          console.log('[SerpApi][fallback] google_maps_place by data_id status:', fbRes.status);
+          detail = fbRes?.data;
+        }
       }
     }
     const normalized = normalizePopularTimes(detail || firstLocal);
-    const openingHours = normalizeOpeningHoursFromSerpApi(detail);
-    const isOpen = typeof detail?.opening_hours?.open_now === 'boolean' ? !!detail?.opening_hours?.open_now : null;
-    return { popularTimes: normalized, openingHours, isOpen };
+    const openingHours = normalizeOpeningHoursFromSerpApi(detail) || normalizeOpeningHoursFromSerpApi(detail?.place_results);
+    const isOpen = typeof detail?.opening_hours?.open_now === 'boolean'
+      ? !!detail?.opening_hours?.open_now
+      : (typeof detail?.place_results?.opening_hours?.open_now === 'boolean' ? !!detail?.place_results?.opening_hours?.open_now : null);
+    const price = (detail?.place_results?.price ?? firstLocal?.price) || null;
+    return { popularTimes: normalized, openingHours, isOpen, price };
   } catch (e: any) {
     console.error('[Import] SerpApi error:', e?.response?.status, e?.response?.data || e?.message || e);
     return null;
@@ -1327,6 +1438,7 @@ app.post('/places/popular-times/import-once', authenticate, async (req: express.
             popularTimes: fromSerp!.popularTimes,
             openingHours: fromSerp!.openingHours,
             ...(isOpen !== null ? { isOpen } : {}),
+            ...(fromSerp?.price ? { price: fromSerp.price } : {}),
             dataSource: 'serpapi',
             popularityProvider: 'serpapi',
             popularityUpdatedBy: 'auto',
@@ -1397,10 +1509,11 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req: expres
       return;
     }
 
-    await ref.update({
+  await ref.update({
       popularTimes: fromSerp!.popularTimes,
       openingHours: fromSerp!.openingHours,
       ...(isOpen !== null ? { isOpen } : {}),
+      ...(fromSerp?.price ? { price: fromSerp.price } : {}),
       dataSource: 'serpapi',
       popularityProvider: 'serpapi',
       popularityUpdatedBy: 'manual',
