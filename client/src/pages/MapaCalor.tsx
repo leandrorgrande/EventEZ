@@ -143,6 +143,7 @@ export default function MapaCalor() {
       return response.json();
     },
   });
+  const eventsArray: ApprovedEvent[] = Array.isArray(events) ? events : [];
 
   // Buscar lugares automaticamente se estiver vazio
   const searchPlacesMutation = useMutation({
@@ -216,10 +217,10 @@ export default function MapaCalor() {
   }, [places]);
 
   // Filtrar lugares (FORA do useEffect para usar na lista)
+  const placesArray = Array.isArray(places) ? places : [];
   const filteredPlaces = selectedType === 'event'
     ? []
-    : (places
-      ? places.filter(place => {
+    : placesArray.filter(place => {
           // Filtro de tipo
           if (selectedType !== 'all' && (!place.types || !place.types.includes(selectedType))) {
             return false;
@@ -247,9 +248,8 @@ export default function MapaCalor() {
           } else if (statusFilter === 'muitoCheio') {
             if (isClosedAllDay || popularity < 80) return false;
           }
-          return true;
-        })
-      : []);
+        return true;
+      });
 
   // Debug: Log quando places mudar
   useEffect(() => {
@@ -532,8 +532,8 @@ export default function MapaCalor() {
     }
 
     // Renderizar eventos aprovados (bolinha azul)
-    if (Array.isArray(events) && events.length > 0) {
-      events.forEach((ev) => {
+    if (Array.isArray(eventsArray) && eventsArray.length > 0) {
+      eventsArray.forEach((ev) => {
         // Exibir eventos apenas se a data selecionada estiver dentro do intervalo do evento
         if (!(function(date: Date, startStr?: string, endStr?: string){
           if (!startStr) return false;
@@ -665,7 +665,7 @@ export default function MapaCalor() {
       const clickedLng = e.latLng.lng();
       
       // Encontrar lugares próximos (raio de ~200m)
-      const nearbyPlaces = filteredPlaces.filter(place => {
+      const nearbyPlaces = (Array.isArray(filteredPlaces) ? filteredPlaces : []).filter(place => {
         if (!place.latitude || !place.longitude) return false;
         
         const lat = parseFloat(place.latitude.toString());
@@ -1140,7 +1140,7 @@ export default function MapaCalor() {
         <div className="bg-slate-800 p-3 md:p-4 border-t border-slate-700 max-h-[40vh] md:max-h-[300px] overflow-y-auto relative z-10">
           <h2 className="text-base md:text-lg font-bold text-white mb-2 md:mb-3 flex items-center gap-2">
             <MapPin className="h-4 w-4 md:h-5 md:w-5 text-blue-500" />
-            Lugares e Eventos ({(filteredPlaces?.length || 0) + (events?.filter((ev) => {
+            Lugares e Eventos ({(filteredPlaces?.length || 0) + ((Array.isArray(eventsArray) ? eventsArray : []).filter((ev) => {
               if (!ev.startDateTime) return false;
               const toYmd = (d: Date): string => {
                 const local = new Date(d.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
@@ -1157,7 +1157,7 @@ export default function MapaCalor() {
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
             {/* Primeiro: Eventos (prioridade) */}
-            {events && Array.isArray(events) && events
+            {eventsArray && Array.isArray(eventsArray) && eventsArray
               .filter((ev) => {
                 // Filtrar eventos que estão dentro do intervalo da data selecionada
                 if (!ev.startDateTime) return false;
