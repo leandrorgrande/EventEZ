@@ -102,8 +102,9 @@ export default function EventCard({ event, isGoing, onToggleJoin }: EventCardPro
 
         <div className="flex space-x-2">
           <Button
-            className={`${isGoing ? 'flex-1 bg-green-600 hover:bg-green-700' : 'flex-1 bg-blue-600 hover:bg-blue-700'} text-white`}
-            onClick={() => onToggleJoin?.(event.id, !isGoing)}
+            className={`${isGoing ? 'flex-1 bg-green-600 hover:bg-green-700' : 'flex-1 bg-blue-600 hover:bg-blue-700'} text-white ${isPast ? 'opacity-60 cursor-not-allowed hover:bg-inherit' : ''}`}
+            onClick={() => { if (!isPast) onToggleJoin?.(event.id, !isGoing); }}
+            disabled={isPast}
             data-testid={`button-join-event-${event.id}`}
           >
             {isPast ? (isGoing ? 'Você foi' : 'Você não foi') : (isGoing ? 'Participando' : 'Participar')}

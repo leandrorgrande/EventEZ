@@ -85,6 +85,25 @@ export default function Admin() {
     },
     onError: (err: any) => toast({ title: 'Erro ao atualizar tipo', description: err.message || String(err), variant: 'destructive' })
   });
+
+  const updateUserRoleMutation = useMutation({
+    mutationFn: async ({ userId, userType }: { userId: string; userType: 'admin' | 'regular' | 'business' }) => {
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      const resp = await fetch(`${API_URL}/users/${userId}/role`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ userType })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: 'Permissão atualizada', description: 'O tipo de usuário foi alterado.' });
+    },
+    onError: (err: any) => toast({ title: 'Erro ao atualizar permissão', description: err.message || String(err), variant: 'destructive' })
+  });
   const [isUpdatingAll, setIsUpdatingAll] = useState(false);
   // SerpApi import (one-time) states
   const [serpApiKey, setSerpApiKey] = useState<string>("");
@@ -738,11 +757,26 @@ export default function Admin() {
                   <div className="space-y-3">
                     {allUsers.map((user: any) => (
                       <div key={user.id} className="p-3 bg-slate-700/50 rounded-lg flex items-center justify-between">
-                        <div>
-                          <h4 className="font-medium text-white">{user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.email}</h4>
-                          <p className="text-sm text-gray-400">{user.email}</p>
+                        <div className="min-w-0">
+                          <h4 className="font-medium text-white truncate">{user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.email}</h4>
+                          <p className="text-sm text-gray-400 truncate">{user.email}</p>
                         </div>
-                        <Badge variant="secondary">{user.userType || "regular"}</Badge>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-300">Permissão</span>
+                          <Select
+                            value={user.userType || 'regular'}
+                            onValueChange={(v) => updateUserRoleMutation.mutate({ userId: user.id, userType: v as any })}
+                          >
+                            <SelectTrigger className="h-8 w-36 bg-slate-600 border-slate-500 text-white">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-slate-700 border-slate-600 text-white">
+                              <SelectItem value="regular">regular</SelectItem>
+                              <SelectItem value="business">business</SelectItem>
+                              <SelectItem value="admin">admin</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
                     ))}
                   </div>

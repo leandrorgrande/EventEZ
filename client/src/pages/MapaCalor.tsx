@@ -406,13 +406,12 @@ export default function MapaCalor() {
       if (!place.latitude || !place.longitude || !place.popularTimes) return;
 
       const dayKey = selectedDay as keyof typeof place.popularTimes;
-      // Verificar primeiro se está fechado pelas openingHours
-      const isClosedByHours = (place as any).openingHours?.[dayKey]?.closed === true;
-      // Obter popularidade (0 se não existir ou se estiver fechado)
+      // Checar fechado o dia todo e disponibilidade de popularidade
+      const isClosedAllDay = (place as any).openingHours?.[dayKey]?.closed === true;
       const rawPopularity = place.popularTimes[dayKey]?.[selectedHour];
-      const popularity = isClosedByHours ? 0 : (rawPopularity !== undefined ? rawPopularity : 0);
-      // Está fechado se popularidade é 0 ou se explicitamente marcado como closed
-      const isClosed = popularity === 0 || isClosedByHours;
+      const hasPopularity = rawPopularity !== undefined;
+      const popularity = hasPopularity ? rawPopularity : 0;
+      // popularidade calculada; fechado o dia todo controlado por isClosedAllDay
 
       // Adicionar ao heatmap com peso baseado na popularidade
       const location = new (google as any).maps.LatLng(
@@ -429,25 +428,25 @@ export default function MapaCalor() {
         heatmapData.push({ location, weight });
       }
 
-      // Adicionar marcador: se fechado (dia todo) ou se há qualquer movimento (inclui Tranquilo)
-      if ((place as any).openingHours?.[dayKey]?.closed === true || popularity > 0) {
+      // Adicionar marcador: se fechado (dia todo) ou se HÁ um valor de popularidade (inclui 0 = Tranquilo)
+      if (isClosedAllDay || hasPopularity) {
         const marker = new google.maps.Marker({
           position: location,
           map,
-          title: ((place as any).openingHours?.[dayKey]?.closed === true) ? `${place.name} - 🔒 Fechado` : `${place.name} - ${popularity}%`,
+          title: (isClosedAllDay) ? `${place.name} - 🔒 Fechado` : `${place.name} - ${getPopularityLabel(popularity)}`,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: ((place as any).openingHours?.[dayKey]?.closed === true) ? 6 : 6 + (popularity / 8), // Tamanho menor para fechado
-            fillColor: ((place as any).openingHours?.[dayKey]?.closed === true) ? '#000000' : getColorByPopularity(popularity),
+            scale: (isClosedAllDay) ? 6 : 6 + (popularity / 8), // Tamanho menor para fechado
+            fillColor: (isClosedAllDay) ? '#000000' : getColorByPopularity(popularity),
             fillOpacity: 0.9,
             strokeColor: '#ffffff',
             strokeWeight: 2,
           },
-          animation: ((place as any).openingHours?.[dayKey]?.closed === true) ? undefined : (popularity >= 80 ? google.maps.Animation.BOUNCE : undefined),
+          animation: (isClosedAllDay) ? undefined : (popularity >= 80 ? google.maps.Animation.BOUNCE : undefined),
         });
 
         // InfoWindow ao clicar
-        const isClosedAllDayLocal = (place as any).openingHours?.[dayKey]?.closed === true;
+        const isClosedAllDayLocal = isClosedAllDay;
         const statusLabel = isClosedAllDayLocal ? '🔒 Fechado' : `Movimento ${getPopularityLabel(popularity)}`;
         const bgColor = isClosedAllDayLocal ? '#000000' : getColorByPopularity(popularity);
         
