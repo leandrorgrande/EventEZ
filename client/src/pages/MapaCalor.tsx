@@ -102,7 +102,8 @@ export default function MapaCalor() {
   // Controles de tempo
   const [selectedDate, setSelectedDate] = useState<Date>(brasiliaTime); // Padrão: Data atual
   const [selectedHour, setSelectedHour] = useState<number>(brasiliaTime.getHours()); // Padrão: Hora atual
-  const [selectedType, setSelectedType] = useState<string>('all'); // Filtro de tipo
+  const [selectedType, setSelectedType] = useState<string>('bar'); // Filtro de tipo (default: Bares)
+  const [selectedCity, setSelectedCity] = useState<string>('Santos'); // Filtro de cidade (default: Santos)
   const [statusFilter, setStatusFilter] = useState<'all' | 'openOnly' | 'closed' | 'tranquilo' | 'moderado' | 'movimentado' | 'muitoCheio'>('all'); // Filtro de status (default: Todos)
   const [minRating, setMinRating] = useState<number>(0); // Filtro de avaliação mínima
   const [filtersExpanded, setFiltersExpanded] = useState<boolean>(false); // Controle de expansão dos filtros - padrão fechado
@@ -228,6 +229,12 @@ export default function MapaCalor() {
           if (selectedType !== 'all' && (!place.types || !place.types.includes(selectedType))) {
             return false;
           }
+          // Filtro de cidade
+          if (selectedCity && selectedCity !== 'all') {
+            const cityMatch = place.formattedAddress?.toLowerCase().includes(selectedCity.toLowerCase()) ||
+                             (place as any).city?.toLowerCase().includes(selectedCity.toLowerCase());
+            if (!cityMatch) return false;
+          }
           // Filtro de avaliação
           if (minRating > 0 && (!place.rating || place.rating < minRating)) {
             return false;
@@ -265,7 +272,7 @@ export default function MapaCalor() {
       console.log('[MapaCalor] Primeiro lugar tem popularTimes?', !!places[0].popularTimes);
       console.log('[MapaCalor] Primeiro lugar tem openingHours?', !!places[0].openingHours);
     }
-  }, [places, isLoading, filteredPlaces]);
+  }, [places, isLoading]);
 
   // Funções auxiliares - definidas antes dos useEffects
   const getDayLabel = (day: string): string => {
@@ -723,7 +730,7 @@ export default function MapaCalor() {
     return () => {
       google.maps.event.removeListener(mapClickListener);
     };
-  }, [map, places, events, selectedDay, selectedHour, selectedType, minRating, statusFilter]);
+  }, [map, places, events, selectedDay, selectedHour, selectedType, selectedCity, minRating, statusFilter]);
 
   // Funções auxiliares
   const getColorByPopularity = (popularity: number): string => {
@@ -948,7 +955,7 @@ export default function MapaCalor() {
             )}
 
             {/* Controles */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Data */}
           <Card className="bg-slate-700 border-slate-600">
             <CardContent className="p-4">
@@ -1045,6 +1052,28 @@ export default function MapaCalor() {
                   <SelectItem value="restaurant">🍽️ Restaurantes</SelectItem>
                   <SelectItem value="cafe">☕ Cafés</SelectItem>
                   <SelectItem value="event">🎫 Eventos</SelectItem>
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+
+          {/* Cidade */}
+          <Card className="bg-slate-700 border-slate-600">
+            <CardContent className="p-4">
+              <label className="text-sm text-gray-300 flex items-center gap-2 mb-2">
+                <MapPin className="h-4 w-4" />
+                Cidade
+              </label>
+              <Select value={selectedCity} onValueChange={setSelectedCity}>
+                <SelectTrigger className="bg-slate-600 border-slate-500 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-700 border-slate-600">
+                  <SelectItem value="all">Todas</SelectItem>
+                  <SelectItem value="Santos">Santos</SelectItem>
+                  <SelectItem value="São Vicente">São Vicente</SelectItem>
+                  <SelectItem value="Guarujá">Guarujá</SelectItem>
+                  <SelectItem value="Praia Grande">Praia Grande</SelectItem>
                 </SelectContent>
               </Select>
             </CardContent>

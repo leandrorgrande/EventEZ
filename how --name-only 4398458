@@ -1,0 +1,15 @@
+[33m931555d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m MapaCalor: restaurar auto-carregamento inicial de lugares (com token guard) para voltar a preencher o banco quando vazio
+[33m05cb2f3[m Admin: sempre buscar 'Gerenciar Lugares'; MapaCalor: auto-carregar lugares só para admin (evita 401 para visitantes)
+[33ma047563[m MapaCalor: restaurar exibição de lugares - remover filtro por bounds e renderizar marcadores para todos os lugares filtrados
+[33m9b8ec47[m MapaCalor: correções defensivas para evitar erro 'filter is not a function' (coerção de arrays em places/events, filtros e contadores)
+[33m043ce94[m MapaCalor: remover prefixo 'Movimento' dos rótulos e padronizar tamanho dos marcadores (exceto evento) para o de 'Tranquilo'
+[33m9be4742[m MapaCalor: reduzir tamanho do vermelho, usar InfoWindow compartilhada e renderizar marcadores apenas dentro dos bounds para melhorar performance
+[33md5d82e0[m[33m ([m[1;31morigin/main[m[33m)[m fix(import-manual): só atualizar Firestore em sucesso real (popularTimes+openingHours); fix(auto): não marcar autoDone sem dados; feat(places): filtros e paginação na API; refactor(Admin): remover aba Scraping
+[33mbe76d88[m chore(prod): publicar últimas correções SerpApi e UI Admin
+[33m4398458[m MapaCalor: remover animaÃ§Ã£o e tamanho extra de 'Muito Cheio'; aumentar destaque do marcador azul de eventos
+[33m89f1724[m Criar Evento em PT-BR: labels, toasts, placeholders; invalidaÃ§Ã£o correta de eventos; suporte a mÃ­dia mantido
+[33m6fe7f6d[m chore(serpapi): logs de status/keys para search/place; fallback normaliza place_results.popular_times
+[33m7b6e573[m fix(serpapi): ler place_results.popular_times e mapear busyness_score/time; remover duplicaÃ§Ãµes; logs mantidos
+[33m0f9bb76[m chore(deploy): publicar ajustes SerpApi (params, logs) e UI Admin
+[33m6516a78[m feat(popularTimes): processamento incremental (auto flags e datas); endpoint import por lugar; Admin: bulk + linha, datas e ordenaÃ§Ã£o
+[33m3f81e91[m Admin: trocar role (admin/regular/business) no painel; Events: desabilitar presenÃ§a apÃ³s fim; MapaCalor: exibir marcador verde para Tranquilo; API: PATCH /users/:id/role
