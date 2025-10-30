@@ -1183,9 +1183,15 @@ app.post('/places/popular-times/import-once', authenticate, async (req: express.
         let openingHours: any | null = null;
         let isOpen: boolean | null = null;
         // Permitir override de API key somente nesta chamada, sem persistir
-        if (overrideApiKey) {
-          (process as any).env.SERPAPI_API_KEY = overrideApiKey;
-        }
+    if (overrideApiKey) {
+      (process as any).env.SERPAPI_API_KEY = overrideApiKey;
+      log(`Override SERPAPI_API_KEY recebido (tamanho=${overrideApiKey.length}).`);
+    }
+    if (!process.env.SERPAPI_API_KEY) {
+      log('SERPAPI_API_KEY ausente. Configure nas Functions (env var) ou envie apiKey no corpo.');
+    } else {
+      log('SERPAPI_API_KEY presente.');
+    }
         const latNum = typeof place.latitude === 'string' ? parseFloat(place.latitude) : (typeof place.latitude === 'number' ? place.latitude : null);
         const lngNum = typeof place.longitude === 'string' ? parseFloat(place.longitude) : (typeof place.longitude === 'number' ? place.longitude : null);
         const fromSerp = await fetchPopularTimesFromSerpApi(
@@ -1200,6 +1206,8 @@ app.post('/places/popular-times/import-once', authenticate, async (req: express.
           openingHours = fromSerp.openingHours;
           isOpen = fromSerp.isOpen;
           log(`SerpApi retornou popularTimes=${!!popularTimes}, openingHours=${!!openingHours}, isOpen=${isOpen}`);
+        } else {
+          log('SerpApi não retornou dados (fromSerp=null).');
         }
         if (!popularTimes && place.googleMapsUri) {
           popularTimes = await scrapePopularTimes(place.name || place.displayName?.text || '', place.googleMapsUri);
