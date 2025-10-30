@@ -204,7 +204,12 @@ export default function MapaCalor() {
 
   // Carregar lugares automaticamente na primeira vez
   useEffect(() => {
-    if (places && places.length === 0 && !searchPlacesMutation.isPending && isAdmin) {
+    if (places && places.length === 0 && !searchPlacesMutation.isPending) {
+      // Só dispara a busca inicial se o usuário estiver autenticado (endpoint exige token)
+      if (!auth.currentUser) {
+        console.log('[MapaCalor] Usuário não autenticado - não disparar busca inicial protegida');
+        return;
+      }
       console.log('[MapaCalor] Banco vazio, buscando lugares iniciais');
       toast({
         title: "Carregando lugares...",
