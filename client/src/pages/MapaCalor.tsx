@@ -328,9 +328,11 @@ export default function MapaCalor() {
 
   // Função para abrir InfoWindow ao clicar na lista
   const openInfoWindowForPlace = (place: Place) => {
-    const markerData = markersMap.current.get(place.id);
-    if (markerData && markerData.infoWindow && map) {
-      markerData.infoWindow.open(map, markerData.marker);
+    const markerData = markersMap.current.get(place.id) as any;
+    if (markerData && map) {
+      if (!sharedInfoWindowRef.current) sharedInfoWindowRef.current = new google.maps.InfoWindow();
+      sharedInfoWindowRef.current.setContent(markerData.infoWindow);
+      sharedInfoWindowRef.current.open(map, markerData.marker);
     }
   };
 
@@ -728,7 +730,7 @@ export default function MapaCalor() {
     return () => {
       google.maps.event.removeListener(mapClickListener);
     };
-  }, [map, places, events, selectedDay, selectedHour, selectedType, minRating, statusFilter]);
+  }, [map, places, events, selectedDay, selectedHour, selectedType, minRating, statusFilter, mapRenderTick]);
 
   // Funções auxiliares
   const getColorByPopularity = (popularity: number): string => {
