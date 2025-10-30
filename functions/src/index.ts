@@ -1158,9 +1158,21 @@ app.post('/places/popular-times/import-once', authenticate, async (req: express.
       const q = nameIncludes.toLowerCase();
       places = places.filter(p => (p.name || p.displayName?.text || '').toLowerCase().includes(q));
     }
-    // Apenas os que ainda não possuem popularTimes
-    places = places.filter(p => !p.popularTimes).slice(0, limit);
-    log(`Selecionados ${places.length} lugares após filtros (sem popularTimes).`);
+    // Selecionar apenas os que ainda não foram processados automaticamente
+    // Ordenar por popularityAutoUpdatedAt (nulos primeiro), depois updatedAt
+    const pending = places.filter((p: any) => !p.popularityAutoDone);
+    const sorted = pending.sort((a: any, b: any) => {
+      const aTs = a.popularityAutoUpdatedAt?.toMillis ? a.popularityAutoUpdatedAt.toMillis() : (a.popularityAutoUpdatedAt?._seconds ? a.popularityAutoUpdatedAt._seconds * 1000 : 0);
+      const bTs = b.popularityAutoUpdatedAt?.toMillis ? b.popularityAutoUpdatedAt.toMillis() : (b.popularityAutoUpdatedAt?._seconds ? b.popularityAutoUpdatedAt._seconds * 1000 : 0);
+      if (!aTs && bTs) return -1;
+      if (aTs && !bTs) return 1;
+      if (aTs !== bTs) return aTs - bTs;
+      const aUp = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : (a.updatedAt?._seconds ? a.updatedAt._seconds * 1000 : 0);
+      const bUp = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : (b.updatedAt?._seconds ? b.updatedAt._seconds * 1000 : 0);
+      return aUp - bUp;
+    });
+    places = sorted.slice(0, limit);
+    log(`Selecionados ${places.length} lugares pendentes (ordem por popularityAutoUpdatedAt).`);
 
     let updated = 0; let failed = 0; const results: any[] = [];
 
@@ -1199,6 +1211,10 @@ app.post('/places/popular-times/import-once', authenticate, async (req: express.
             ...(openingHours ? { openingHours } : {}),
             ...(isOpen !== null ? { isOpen } : {}),
             dataSource: fromSerp ? 'serpapi' : 'scraped',
+            popularityProvider: fromSerp ? 'serpapi' : 'scraped',
+            popularityUpdatedBy: 'auto',
+            popularityAutoDone: true,
+            popularityAutoUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           });
           updated++; results.push({ id: place.id, name: place.name || place.displayName?.text || '', ok: true, source: fromSerp ? 'serpapi' : 'scraped' });
@@ -1216,6 +1232,84 @@ app.post('/places/popular-times/import-once', authenticate, async (req: express.
   } catch (error: any) {
     console.error('[Import] erro geral:', error);
     res.status(500).json({ message: 'Failed to import popular times', error: error?.message });
+  }
+});
+
+// Import popular times para um único lugar (manual)
+app.post('/places/:docId/popular-times/import', authenticate, async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    const { docId } = req.params;
+    const overrideApiKey: string | undefined = (req.body as any)?.apiKey;
+    const logMessages: string[] = [];
+    const log = (m: string) => { console.log('[Import-One]', m); logMessages.push(m); };
+
+    const ref = db.collection('places').doc(docId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ message: 'Place não encontrado' });
+      return;
+    }
+    const place = { id: docId, ...(snap.data() as any) } as any;
+    log(`Processando (manual): ${place.name || place.displayName?.text || place.id}`);
+
+    if (overrideApiKey) (process as any).env.SERPAPI_API_KEY = overrideApiKey;
+
+    const latNum = typeof place.latitude === 'string' ? parseFloat(place.latitude) : (typeof place.latitude === 'number' ? place.latitude : null);
+    const lngNum = typeof place.longitude === 'string' ? parseFloat(place.longitude) : (typeof place.longitude === 'number' ? place.longitude : null);
+    const fromSerp = await fetchPopularTimesFromSerpApi(
+      place.name || place.displayName?.text || '',
+      place.formattedAddress,
+      place.placeId || null,
+      latNum,
+      lngNum,
+    );
+    let popularTimes: any | null = null;
+    let openingHours: any | null = null;
+    let isOpen: boolean | null = null;
+    if (fromSerp) {
+      popularTimes = fromSerp.popularTimes;
+      openingHours = fromSerp.openingHours;
+      isOpen = fromSerp.isOpen;
+      log(`SerpApi: popularTimes=${!!popularTimes}, openingHours=${!!openingHours}, isOpen=${isOpen}`);
+    }
+    if (!popularTimes && place.googleMapsUri) {
+      popularTimes = await scrapePopularTimes(place.name || place.displayName?.text || '', place.googleMapsUri);
+      log(`Fallback scraping: popularTimes=${!!popularTimes}`);
+    }
+
+    if (!popularTimes && place.openingHours) {
+      popularTimes = {
+        monday: Array(24).fill(0),
+        tuesday: Array(24).fill(0),
+        wednesday: Array(24).fill(0),
+        thursday: Array(24).fill(0),
+        friday: Array(24).fill(0),
+        saturday: Array(24).fill(0),
+        sunday: Array(24).fill(0)
+      };
+      log('Sem dados reais, mantendo zeros.');
+    }
+
+    if (!popularTimes) {
+      res.status(502).json({ message: 'Não foi possível obter Popular Times', logs: logMessages });
+      return;
+    }
+
+    await ref.update({
+      popularTimes,
+      ...(openingHours ? { openingHours } : {}),
+      ...(isOpen !== null ? { isOpen } : {}),
+      dataSource: fromSerp ? 'serpapi' : 'scraped',
+      popularityProvider: fromSerp ? 'serpapi' : 'scraped',
+      popularityUpdatedBy: 'manual',
+      popularityManualUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    res.json({ success: true, id: docId, source: fromSerp ? 'serpapi' : 'scraped', logs: logMessages });
+  } catch (error: any) {
+    console.error('[Import-One] erro:', error);
+    res.status(500).json({ message: error?.message || 'Falha na importação manual' });
   }
 });
 

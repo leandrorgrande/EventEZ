@@ -22,7 +22,8 @@ import {
   XCircle, 
   Clock,
   Edit,
-  Trash
+  Trash,
+  Download
 } from "lucide-react";
 
 export default function Admin() {
@@ -317,6 +318,30 @@ export default function Admin() {
     onSettled: () => setSerpImporting(false),
   });
 
+  // Import Popular Times para uma linha
+  const importOnePopularityMutation = useMutation({
+    mutationFn: async ({ docId, apiKey }: { docId: string; apiKey?: string }) => {
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      const resp = await fetch(`${API_URL}/places/${docId}/popular-times/import`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(apiKey ? { apiKey } : {})
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
+      return data;
+    },
+    onSuccess: (data: any) => {
+      toast({ title: 'Importação (linha) concluída', description: data?.source ? `Fonte: ${data.source}` : 'OK' });
+      refetchPlaces();
+    },
+    onError: (err: any) => toast({ title: 'Erro na importação (linha)', description: err.message || String(err), variant: 'destructive' })
+  });
+
   // Função para atualizar um place individual
   const updatePlaceMutation = useMutation({
     mutationFn: async (placeId: string) => {
@@ -521,19 +546,40 @@ export default function Admin() {
           <TabsContent value="places" className="space-y-4">
             <Card className="bg-slate-800 border-slate-700">
               <CardHeader>
-                <CardTitle className="flex items-center justify-between">Gerenciar Lugares
-                <span className="text-xs text-gray-400 ml-2">{Array.isArray(allPlaces) ? allPlaces.length : 0}</span>
+                <CardTitle className="flex items-center justify-between">
+                  Gerenciar Lugares
+                  <span className="text-xs text-gray-400 ml-2">{Array.isArray(allPlaces) ? allPlaces.length : 0}</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-3">
+                <div className="flex gap-2 flex-wrap">
+                  <Button onClick={() => importSerpApiMutation.mutate()} disabled={serpImporting} className="bg-blue-600 hover:bg-blue-700">
+                    {serpImporting ? <><Clock className="h-4 w-4 mr-2 animate-spin"/>Importando...</> : <><Download className="h-4 w-4 mr-2"/>Importar Popular Times (bulk)</>}
+                  </Button>
+                </div>
                 {Array.isArray(allPlaces) && allPlaces.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {allPlaces.map((p: any) => (
+                    {allPlaces
+                      .slice()
+                      .sort((a: any, b: any) => {
+                        const aTs = a.popularityAutoUpdatedAt?._seconds ? a.popularityAutoUpdatedAt._seconds : 0;
+                        const bTs = b.popularityAutoUpdatedAt?._seconds ? b.popularityAutoUpdatedAt._seconds : 0;
+                        if (!aTs && bTs) return -1;
+                        if (aTs && !bTs) return 1;
+                        return aTs - bTs;
+                      })
+                      .map((p: any) => (
                       <div key={p.id} className="p-3 bg-slate-700/50 rounded border border-slate-600">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="text-white font-semibold truncate">{p.name}</div>
                             <div className="text-xs text-gray-400 truncate">{p.formattedAddress || ''}</div>
+                            <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-300">
+                              <div>Fonte: <span className="text-gray-200">{p.popularityProvider || p.dataSource || '—'}</span></div>
+                              <div>Auto done: <span className="text-gray-200">{p.popularityAutoDone ? 'sim' : 'não'}</span></div>
+                              <div>Auto em: <span className="text-gray-200">{p.popularityAutoUpdatedAt?._seconds ? new Date(p.popularityAutoUpdatedAt._seconds*1000).toLocaleString('pt-BR') : '—'}</span></div>
+                              <div>Manual em: <span className="text-gray-200">{p.popularityManualUpdatedAt?._seconds ? new Date(p.popularityManualUpdatedAt._seconds*1000).toLocaleString('pt-BR') : '—'}</span></div>
+                            </div>
                             <div className="mt-2 flex items-center gap-2">
                               <span className="text-xs text-gray-300">Tipo:</span>
                               <Select value={(p.types?.[0]) || ''} onValueChange={(v) => updateTypesMutation.mutate({ docId: p.id, types: [v] })}>
@@ -553,6 +599,9 @@ export default function Admin() {
                             </div>
                           </div>
                           <div className="flex flex-col gap-2 flex-shrink-0">
+                            <Button variant="secondary" size="sm" onClick={() => importOnePopularityMutation.mutate({ docId: p.id, apiKey: serpApiKey || undefined })}>
+                              <Download className="h-4 w-4 mr-1" /> Buscar API (linha)
+                            </Button>
                             <Button variant="destructive" size="sm" onClick={() => deletePlaceMutation.mutate(p.id)}>
                               <Trash className="h-4 w-4 mr-1" /> Excluir
                             </Button>

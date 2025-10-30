@@ -123,6 +123,29 @@ app.post('/users/make-admin', async (req, res) => {
         res.status(500).json({ message: "Failed to make user admin" });
     }
 });
+// Update user role (admin/regular)
+app.patch('/users/:id/role', authenticate, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { userType } = req.body;
+        if (!userType || !['admin', 'regular', 'business'].includes(userType)) {
+            res.status(400).json({ message: "userType inválido" });
+            return;
+        }
+        const ref = db.collection('users').doc(id);
+        const snap = await ref.get();
+        if (!snap.exists) {
+            res.status(404).json({ message: 'User not found' });
+            return;
+        }
+        await ref.update({ userType, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+        res.json({ success: true, id, userType });
+    }
+    catch (error) {
+        console.error('[API] Erro ao atualizar role do usuário:', error);
+        res.status(500).json({ message: 'Failed to update user role' });
+    }
+});
 // ============ EVENTS ============
 // Rota de DEBUG para listar TODOS os eventos sem filtro
 app.get('/events/debug', authenticate, async (req, res) => {
