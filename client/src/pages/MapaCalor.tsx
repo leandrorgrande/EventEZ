@@ -77,8 +77,6 @@ export default function MapaCalor() {
   const [eventMarkers, setEventMarkers] = useState<any[]>([]);
   const [customOverlays, setCustomOverlays] = useState<any[]>([]);
   const markersMap = useRef<Map<string, { marker: any; infoWindow: any }>>(new Map()); // Mapa de placeId -> marker/infoWindow
-  const sharedInfoWindowRef = useRef<any>(null); // InfoWindow compartilhada para todos os marcadores
-  const [mapRenderTick, setMapRenderTick] = useState<number>(0); // força rerender quando bounds mudam
   const mapRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { isAdmin } = useAuth();
@@ -333,11 +331,9 @@ export default function MapaCalor() {
 
   // Função para abrir InfoWindow ao clicar na lista
   const openInfoWindowForPlace = (place: Place) => {
-    const markerData = markersMap.current.get(place.id) as any;
-    if (markerData && map) {
-      if (!sharedInfoWindowRef.current) sharedInfoWindowRef.current = new google.maps.InfoWindow();
-      sharedInfoWindowRef.current.setContent(markerData.infoWindow);
-      sharedInfoWindowRef.current.open(map, markerData.marker);
+    const markerData = markersMap.current.get(place.id);
+    if (markerData && markerData.infoWindow && map) {
+      markerData.infoWindow.open(map, markerData.marker);
     }
   };
 
@@ -388,14 +384,7 @@ export default function MapaCalor() {
     loadGoogleMaps();
   }, [toast]);
 
-  // Listener de bounds para re-renderizar apenas itens visíveis
-  useEffect(() => {
-    if (!map) return;
-    const idleListener = map.addListener('idle', () => setMapRenderTick((t: number) => t + 1));
-    return () => {
-      google.maps.event.removeListener(idleListener);
-    };
-  }, [map]);
+  // (sem listener extra)
 
   // Atualizar heatmap quando mudar dia, hora ou lugares
   useEffect(() => {
@@ -446,11 +435,15 @@ export default function MapaCalor() {
         heatmapData.push({ location, weight });
       }
 
-      // Adicionar marcador para todos os lugares filtrados (padronizado)
-      {
-        // Escala do marcador: padronizar todos (exceto evento) para o tamanho de "Tranquilo"
+      // Adicionar marcador: se fechado (dia todo) ou se HÁ um valor de popularidade (inclui 0 = Tranquilo)
+      if (isClosedAllDay || hasPopularity) {
+        // Escala do marcador: diminuir um pouco o vermelho e suavizar crescimento
         const baseScale = 6;
-        const finalScale = baseScale;
+        const dynamicScale = baseScale + (popularity / 12);
+        const scaleForVeryBusy = 10; // tamanho fixo mais discreto para "Muito Cheio"
+        const finalScale = isClosedAllDay
+          ? baseScale
+          : (popularity >= 80 ? scaleForVeryBusy : dynamicScale);
         const marker = new google.maps.Marker({
           position: location,
           map,
@@ -467,9 +460,9 @@ export default function MapaCalor() {
           animation: undefined,
         });
 
-        // InfoWindow ao clicar (usar InfoWindow compartilhada)
+        // InfoWindow ao clicar (criar por marcador)
         const isClosedAllDayLocal = isClosedAllDay;
-        const statusLabel = isClosedAllDayLocal ? '🔒 Fechado' : `${getPopularityLabel(popularity)}`;
+        const statusLabel = isClosedAllDayLocal ? '🔒 Fechado' : `Movimento ${getPopularityLabel(popularity)}`;
         const bgColor = isClosedAllDayLocal ? '#000000' : getColorByPopularity(popularity);
         
         // Calcular mensagem de horário condizente com status
@@ -495,35 +488,35 @@ export default function MapaCalor() {
           }
         }
         
-        const contentHtml = `
-          <div style="padding: 12px; font-family: Arial, sans-serif; min-width: 200px;">
-            <h3 style="margin: 0 0 8px 0; color: #1f2937; font-size: 16px;">${place.name}</h3>
-            <div style="background: ${bgColor}; color: white; padding: 6px 10px; border-radius: 4px; margin-bottom: 8px; text-align: center;">
-              <strong style="font-size: 16px;">${statusLabel}</strong>
+        const infoWindow = new google.maps.InfoWindow({
+          content: `
+            <div style="padding: 12px; font-family: Arial, sans-serif; min-width: 200px;">
+              <h3 style="margin: 0 0 8px 0; color: #1f2937; font-size: 16px;">${place.name}</h3>
+              <div style="background: ${bgColor}; color: white; padding: 6px 10px; border-radius: 4px; margin-bottom: 8px; text-align: center;">
+                <strong style="font-size: 16px;">${statusLabel}</strong>
+              </div>
+              ${timeInfo}
+              ${place.formattedAddress ? `
+                <p style=\"margin: 8px 0 0 0; color: #9ca3af; font-size: 12px;\">
+                  📍 ${place.formattedAddress}
+                </p>
+              ` : ''}
+              <button 
+                onclick=\"window.open('https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}', '_blank')\"
+                style=\"margin-top: 10px; width: 100%; padding: 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;\"
+              >
+                Ver no Google Maps
+              </button>
             </div>
-            ${timeInfo}
-            ${place.formattedAddress ? `
-              <p style="margin: 8px 0 0 0; color: #9ca3af; font-size: 12px;">
-                📍 ${place.formattedAddress}
-              </p>
-            ` : ''}
-            <button 
-              onclick="window.open('https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}', '_blank')"
-              style="margin-top: 10px; width: 100%; padding: 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;"
-            >
-              Ver no Google Maps
-            </button>
-          </div>
-        `;
-
-        marker.addListener('click', () => {
-          if (!sharedInfoWindowRef.current) sharedInfoWindowRef.current = new google.maps.InfoWindow();
-          sharedInfoWindowRef.current.setContent(contentHtml);
-          sharedInfoWindowRef.current.open(map, marker);
+          `
         });
 
-        // Armazenar marker e conteúdo para abrir ao clicar na lista
-        markersMap.current.set(place.id, { marker, infoWindow: contentHtml as any });
+        marker.addListener('click', () => {
+          infoWindow.open(map, marker);
+        });
+
+        // Armazenar marker e infoWindow para poder abrir ao clicar na lista
+        markersMap.current.set(place.id, { marker, infoWindow });
 
         newMarkers.push(marker);
       }
@@ -570,30 +563,28 @@ export default function MapaCalor() {
           zIndex: 1000,
         });
 
-        const eventContentHtml = `
-          <div style="padding: 10px; font-family: Arial, sans-serif; min-width: 200px;">
-            <h3 style="margin: 0 0 8px 0; color: #1f2937; font-size: 16px;">🎫 ${ev.title || 'Evento'}</h3>
-            ${ev.startDateTime ? `<p style=\"margin:0; color:#6b7280; font-size:13px;\">Início: ${new Date(ev.startDateTime).toLocaleString('pt-BR')}</p>` : ''}
-            ${ev.endDateTime ? `<p style=\"margin:0; color:#6b7280; font-size:13px;\">Fim: ${new Date(ev.endDateTime).toLocaleString('pt-BR')}</p>` : ''}
-            <p style="margin:6px 0 0 0; color:#1f2937; font-size:13px;"><strong>${(ev as any).attendeesCount || 0} pessoas vão</strong></p>
-            <div style="margin-top:10px; display:flex; align-items:center; gap:8px;">
-              <div style="width:10px; height:10px; border-radius:50%; background:#3B82F6;"></div>
-              <span style="font-size:12px; color:#1f2937;">Evento</span>
+        const infoWindow = new google.maps.InfoWindow({
+          content: `
+            <div style="padding: 10px; font-family: Arial, sans-serif; min-width: 200px;">
+              <h3 style="margin: 0 0 8px 0; color: #1f2937; font-size: 16px;">🎫 ${ev.title || 'Evento'}</h3>
+              ${ev.startDateTime ? `<p style=\"margin:0; color:#6b7280; font-size:13px;\">Início: ${new Date(ev.startDateTime).toLocaleString('pt-BR')}</p>` : ''}
+              ${ev.endDateTime ? `<p style=\"margin:0; color:#6b7280; font-size:13px;\">Fim: ${new Date(ev.endDateTime).toLocaleString('pt-BR')}</p>` : ''}
+              <p style="margin:6px 0 0 0; color:#1f2937; font-size:13px;"><strong>${(ev as any).attendeesCount || 0} pessoas vão</strong></p>
+              <div style="margin-top:10px; display:flex; align-items:center; gap:8px;">
+                <div style="width:10px; height:10px; border-radius:50%; background:#3B82F6;"></div>
+                <span style="font-size:12px; color:#1f2937;">Evento</span>
+              </div>
+              <button 
+                onclick=\"window.open('https://www.google.com/maps/search/?api=1&query=${latNum},${lngNum}', '_blank')\"
+                style=\"margin-top: 10px; width: 100%; padding: 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;\"
+              >
+                Ver no Google Maps
+              </button>
             </div>
-            <button 
-              onclick="window.open('https://www.google.com/maps/search/?api=1&query=${latNum},${lngNum}', '_blank')"
-              style="margin-top: 10px; width: 100%; padding: 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;"
-            >
-              Ver no Google Maps
-            </button>
-          </div>
-        `;
-
-        marker.addListener('click', () => {
-          if (!sharedInfoWindowRef.current) sharedInfoWindowRef.current = new google.maps.InfoWindow();
-          sharedInfoWindowRef.current.setContent(eventContentHtml);
-          sharedInfoWindowRef.current.open(map, marker);
+          `
         });
+
+        marker.addListener('click', () => infoWindow.open(map, marker));
         newEventMarkers.push(marker);
       });
     }
@@ -684,7 +675,7 @@ export default function MapaCalor() {
           .map(p => {
             const pop = (p as any).popularTimes?.[dayKey]?.[selectedHour] ?? 0;
             const closedAllDay = (p as any).openingHours?.[dayKey]?.closed === true;
-            const statusLabel = closedAllDay ? '🔒 Fechado' : `${getPopularityLabel(pop)}`;
+            const statusLabel = closedAllDay ? '🔒 Fechado' : `Movimento ${getPopularityLabel(pop)}`;
             const statusColor = closedAllDay ? '#000000' : getColorByPopularity(pop);
             return `
               <div style="padding: 8px; border-bottom: 1px solid #e5e7eb;">
@@ -725,7 +716,7 @@ export default function MapaCalor() {
     return () => {
       google.maps.event.removeListener(mapClickListener);
     };
-  }, [map, places, events, selectedDay, selectedHour, selectedType, minRating, statusFilter, mapRenderTick]);
+  }, [map, places, events, selectedDay, selectedHour, selectedType, minRating, statusFilter]);
 
   // Funções auxiliares
   const getColorByPopularity = (popularity: number): string => {
