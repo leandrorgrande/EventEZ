@@ -43,13 +43,8 @@ app.get('/places', async (req: express.Request, res: express.Response): Promise<
       type,
       hasType,
       city,
-      district,
-      page = '1',
-      pageSize = '10'
+      district
     } = req.query as any;
-
-    const p = Math.max(1, parseInt(page as string, 10) || 1);
-    const ps = Math.max(1, Math.min(50, parseInt(pageSize as string, 10) || 10));
 
     const snap = await db.collection('places').get();
     let places = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
@@ -76,11 +71,8 @@ app.get('/places', async (req: express.Request, res: express.Response): Promise<
       places = places.filter(p => (p.district || p.neighborhood || p.formattedAddress || '').toLowerCase().includes(q));
     }
 
-    const total = places.length;
-    const start = (p - 1) * ps;
-    const pageItems = places.slice(start, start + ps);
-
-    res.json({ total, page: p, pageSize: ps, items: pageItems });
+    // Retornar array direto para compatibilidade com frontend existente
+    res.json(places);
   } catch (error: any) {
     console.error('[API] Erro ao buscar places com filtros:', error);
     res.status(500).json({ message: 'Failed to fetch places' });

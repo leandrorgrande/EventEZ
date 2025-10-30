@@ -39,7 +39,7 @@ interface Place {
   name: string;
   latitude: number;
   longitude: number;
-  popularTimes: {
+  popularTimes?: {
     monday: number[];
     tuesday: number[];
     wednesday: number[];
@@ -259,10 +259,13 @@ export default function MapaCalor() {
     console.log('[MapaCalor] Places atualizados:', places?.length || 0, 'lugares');
     console.log('[MapaCalor] isLoading:', isLoading);
     console.log('[MapaCalor] auth.currentUser:', !!auth.currentUser);
+    console.log('[MapaCalor] filteredPlaces length:', filteredPlaces?.length || 0);
     if (places && places.length > 0) {
       console.log('[MapaCalor] Primeiro lugar:', places[0]);
+      console.log('[MapaCalor] Primeiro lugar tem popularTimes?', !!places[0].popularTimes);
+      console.log('[MapaCalor] Primeiro lugar tem openingHours?', !!places[0].openingHours);
     }
-  }, [places, isLoading]);
+  }, [places, isLoading, filteredPlaces]);
 
   // Funções auxiliares - definidas antes dos useEffects
   const getDayLabel = (day: string): string => {
@@ -412,12 +415,12 @@ export default function MapaCalor() {
     // Renderizar lugares (heatmap + marcadores por popularidade/fechado)
     if (filteredPlaces && filteredPlaces.length > 0) {
       filteredPlaces.forEach(place => {
-      if (!place.latitude || !place.longitude || !place.popularTimes) return;
+      if (!place.latitude || !place.longitude) return;
 
-      const dayKey = selectedDay as keyof typeof place.popularTimes;
+      const dayKey = selectedDay;
       // Checar fechado o dia todo e disponibilidade de popularidade
       const isClosedAllDay = (place as any).openingHours?.[dayKey]?.closed === true;
-      const rawPopularity = place.popularTimes[dayKey]?.[selectedHour];
+      const rawPopularity = place.popularTimes?.[dayKey as keyof typeof place.popularTimes]?.[selectedHour];
       const hasPopularity = rawPopularity !== undefined;
       const popularity = hasPopularity ? rawPopularity : 0;
       // popularidade calculada; fechado o dia todo controlado por isClosedAllDay
@@ -437,8 +440,10 @@ export default function MapaCalor() {
         heatmapData.push({ location, weight });
       }
 
-      // Adicionar marcador: se fechado (dia todo) ou se HÁ um valor de popularidade (inclui 0 = Tranquilo)
-      if (isClosedAllDay || hasPopularity) {
+      // Adicionar marcador: sempre renderizar, mas distinguir entre fechado, com popularidade, ou sem dados
+      // Se não tem popularTimes e não está fechado, assume tranquilo (popularity = 0)
+      const shouldShowMarker = isClosedAllDay || hasPopularity || !place.popularTimes;
+      if (shouldShowMarker) {
         // Escala do marcador: diminuir um pouco o vermelho e suavizar crescimento
         const baseScale = 6;
         const dynamicScale = baseScale + (popularity / 12);
@@ -1238,11 +1243,11 @@ export default function MapaCalor() {
             
             {/* Depois: Lugares */}
             {filteredPlaces && filteredPlaces.map(place => {
-              const dayKey = selectedDay as keyof typeof place.popularTimes;
+              const dayKey = selectedDay;
               // Verificar primeiro se está fechado pelas openingHours
               const isClosedByHours = (place as any).openingHours?.[dayKey]?.closed === true;
               // Obter popularidade (0 se não existir ou se estiver fechado)
-              const rawPopularity = place.popularTimes?.[dayKey]?.[selectedHour];
+              const rawPopularity = place.popularTimes?.[dayKey as keyof typeof place.popularTimes]?.[selectedHour];
               const popularity = (rawPopularity !== undefined ? rawPopularity : 0);
               const isClosedAllDay = isClosedByHours;
               const color = isClosedAllDay ? '#000000' : getColorByPopularity(popularity);
