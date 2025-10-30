@@ -204,7 +204,7 @@ export default function MapaCalor() {
 
   // Carregar lugares automaticamente na primeira vez
   useEffect(() => {
-    if (places && places.length === 0 && !searchPlacesMutation.isPending) {
+    if (places && places.length === 0 && !searchPlacesMutation.isPending && isAdmin) {
       console.log('[MapaCalor] Banco vazio, buscando lugares iniciais');
       toast({
         title: "Carregando lugares...",

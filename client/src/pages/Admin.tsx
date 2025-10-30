@@ -43,7 +43,7 @@ export default function Admin() {
   const [isLoadingDebug, setIsLoadingDebug] = useState(false);
   const { data: allPlaces = [], refetch: refetchPlaces } = useQuery({
     queryKey: ["/api/places-admin"],
-    enabled: !!isAdmin,
+    enabled: true,
     queryFn: async () => {
       const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
       const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();

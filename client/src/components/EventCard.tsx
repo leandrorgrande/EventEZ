@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, MapPin, Users, Clock } from "lucide-react";
+import { Calendar, MapPin, Users, Clock, Instagram } from "lucide-react";
 
 interface EventCardProps {
   event: any;
@@ -201,6 +201,148 @@ export default function EventCard({ event, isGoing, onToggleJoin }: EventCardPro
     }
   };
 
+  const drawWrappedText = (
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    x: number,
+    y: number,
+    maxWidth: number,
+    lineHeight: number
+  ) => {
+    const words = text.split(' ');
+    let line = '';
+    for (let n = 0; n < words.length; n++) {
+      const testLine = line + words[n] + ' ';
+      const metrics = ctx.measureText(testLine);
+      if (metrics.width > maxWidth && n > 0) {
+        ctx.fillText(line, x, y);
+        line = words[n] + ' ';
+        y += lineHeight;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line, x, y);
+    return y;
+  };
+
+  const generateStoryImage = async (): Promise<Blob> => {
+    const width = 1080;
+    const height = 1920;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas context null');
+
+    // Background gradient
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, '#0f172a'); // slate-900
+    gradient.addColorStop(1, '#1e293b'); // slate-800
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
+    // Optional image background
+    try {
+      const isImage = event.mediaType === 'image' && typeof event.mediaUrl === 'string' && event.mediaUrl.length > 0;
+      if (isImage) {
+        const res = await fetch(event.mediaUrl, { mode: 'cors' });
+        if (res.ok) {
+          const blob = await res.blob();
+          const img = await createImageBitmap(blob);
+          // Cover mode crop
+          const imgRatio = img.width / img.height;
+          const targetRatio = width / height;
+          let sx = 0, sy = 0, sWidth = img.width, sHeight = img.height;
+          if (imgRatio > targetRatio) {
+            sWidth = img.height * targetRatio;
+            sx = (img.width - sWidth) / 2;
+          } else {
+            sHeight = img.width / targetRatio;
+            sy = (img.height - sHeight) / 2;
+          }
+          ctx.globalAlpha = 0.35;
+          ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, width, height);
+          ctx.globalAlpha = 1;
+        }
+      }
+    } catch {
+      // proceed without image
+    }
+
+    // Title
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 72px system-ui, -apple-system, Segoe UI, Roboto';
+    let y = 360;
+    y = drawWrappedText(ctx, event.title || 'Evento', 80, y, width - 160, 82) + 40;
+
+    // Date and location
+    ctx.font = '500 44px system-ui, -apple-system, Segoe UI, Roboto';
+    const dateStr = `${formatDate(event.startDateTime)} • ${formatTime(event.startDateTime)}`;
+    ctx.fillText(dateStr, 80, y);
+    y += 64;
+    if (event.location?.name) {
+      ctx.fillText(String(event.location.name), 80, y);
+      y += 64;
+    }
+
+    // Footer bar with CTA
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(0, height - 260, width, 260);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '600 48px system-ui, -apple-system, Segoe UI, Roboto';
+    const cta = 'Deslize/acesse o link e confirme presença';
+    const ctaWidth = ctx.measureText(cta).width;
+    ctx.fillText(cta, (width - ctaWidth) / 2, height - 120);
+
+    // Return blob
+    const blob: Blob | null = await new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/jpeg', 0.92));
+    if (!blob) throw new Error('Falha ao gerar imagem');
+    return blob;
+  };
+
+  const handleInstagramStory = async () => {
+    try {
+      console.log('[EventCard][IG] Start');
+      const eventUrl = buildEventShareUrl();
+      const shareText = `Eu vou no ${event.title}! Confirme sua presença: ${eventUrl}`;
+      if (!isPast && !isGoing) {
+        console.log('[EventCard][IG] toggling join ON before share');
+        onToggleJoin?.(event.id, true);
+      }
+
+      // Generate image and trigger download
+      const blob = await generateStoryImage();
+      const fileName = `story-${event.id}.jpg`;
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+      console.log('[EventCard][IG] story image generated and downloaded');
+
+      const opened = openInstagramStory();
+      const copied = await copyToClipboard(shareText);
+      console.log('[EventCard][IG] results', { openedInstagram: opened, copied });
+      toast({
+        title: opened ? 'Instagram aberto' : 'Pronto para compartilhar',
+        description: opened
+          ? (copied ? 'Imagem baixada e link copiado. Abra a galeria e poste.' : 'Imagem baixada. Se necessário, copie o link acima.')
+          : (copied ? 'Imagem baixada e link copiado. Abra o Instagram e crie seu Story.' : 'Imagem baixada. Abra o Instagram e crie seu Story.'),
+      });
+    } catch (e) {
+      console.error('[EventCard][IG] error', e);
+      toast({
+        title: 'Falha ao preparar Story',
+        description: 'Tente novamente. Se persistir, use o botão Compartilhar padrão.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <Card className="bg-slate-800 border-slate-700 hover:border-slate-600 transition-colors">
       <CardHeader className="pb-3">
@@ -270,6 +412,16 @@ export default function EventCard({ event, isGoing, onToggleJoin }: EventCardPro
             data-testid={`button-share-event-${event.id}`}
           >
             Compartilhar
+          </Button>
+          <Button
+            variant="secondary"
+            className="bg-pink-600 hover:bg-pink-700 text-white"
+            onClick={handleInstagramStory}
+            data-testid={`button-instagram-story-${event.id}`}
+            title="Compartilhar no Instagram Story"
+          >
+            <Instagram className="h-4 w-4 mr-2" />
+            Story
           </Button>
         </div>
       </CardContent>
