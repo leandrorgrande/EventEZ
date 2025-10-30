@@ -448,13 +448,9 @@ export default function MapaCalor() {
         if (bounds && !bounds.contains(location)) {
           // Fora de tela: não cria marcador (mas mantém no heatmap)
         } else {
-        // Escala do marcador: diminuir um pouco o vermelho e suavizar crescimento
+        // Escala do marcador: padronizar todos (exceto evento) para o tamanho de "Tranquilo"
         const baseScale = 6;
-        const dynamicScale = baseScale + (popularity / 12);
-        const scaleForVeryBusy = 10; // tamanho fixo mais discreto para "Muito Cheio"
-        const finalScale = isClosedAllDay
-          ? baseScale
-          : (popularity >= 80 ? scaleForVeryBusy : dynamicScale);
+        const finalScale = baseScale;
         const marker = new google.maps.Marker({
           position: location,
           map,
@@ -473,7 +469,7 @@ export default function MapaCalor() {
 
         // InfoWindow ao clicar (usar InfoWindow compartilhada)
         const isClosedAllDayLocal = isClosedAllDay;
-        const statusLabel = isClosedAllDayLocal ? '🔒 Fechado' : `Movimento ${getPopularityLabel(popularity)}`;
+        const statusLabel = isClosedAllDayLocal ? '🔒 Fechado' : `${getPopularityLabel(popularity)}`;
         const bgColor = isClosedAllDayLocal ? '#000000' : getColorByPopularity(popularity);
         
         // Calcular mensagem de horário condizente com status
@@ -689,7 +685,7 @@ export default function MapaCalor() {
           .map(p => {
             const pop = (p as any).popularTimes?.[dayKey]?.[selectedHour] ?? 0;
             const closedAllDay = (p as any).openingHours?.[dayKey]?.closed === true;
-            const statusLabel = closedAllDay ? '🔒 Fechado' : `Movimento ${getPopularityLabel(pop)}`;
+            const statusLabel = closedAllDay ? '🔒 Fechado' : `${getPopularityLabel(pop)}`;
             const statusColor = closedAllDay ? '#000000' : getColorByPopularity(pop);
             return `
               <div style="padding: 8px; border-bottom: 1px solid #e5e7eb;">

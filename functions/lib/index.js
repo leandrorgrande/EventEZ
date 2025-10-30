@@ -66,6 +66,45 @@ const authenticate = async (req, res, next) => {
 // Helper functions
 const db = admin.firestore();
 // ============ USERS ============
+// Buscar places com filtros e paginação
+app.get('/places', async (req, res) => {
+    try {
+        const { name, type, hasType, city, district, page = '1', pageSize = '10' } = req.query;
+        const p = Math.max(1, parseInt(page, 10) || 1);
+        const ps = Math.max(1, Math.min(50, parseInt(pageSize, 10) || 10));
+        const snap = await db.collection('places').get();
+        let places = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // Filtros em memória (simplificado)
+        if (name) {
+            const q = String(name).toLowerCase();
+            places = places.filter(p => (p.name || p.displayName?.text || '').toLowerCase().includes(q));
+        }
+        if (type) {
+            const t = String(type).toLowerCase();
+            places = places.filter(p => Array.isArray(p.types) && p.types.some((x) => (x || '').toLowerCase() === t));
+        }
+        if (typeof hasType !== 'undefined') {
+            const want = String(hasType) === 'true';
+            places = places.filter(p => want ? Array.isArray(p.types) && p.types.length > 0 : !(Array.isArray(p.types) && p.types.length > 0));
+        }
+        if (city) {
+            const q = String(city).toLowerCase();
+            places = places.filter(p => (p.city || p.formattedAddress || '').toLowerCase().includes(q));
+        }
+        if (district) {
+            const q = String(district).toLowerCase();
+            places = places.filter(p => (p.district || p.neighborhood || p.formattedAddress || '').toLowerCase().includes(q));
+        }
+        const total = places.length;
+        const start = (p - 1) * ps;
+        const pageItems = places.slice(start, start + ps);
+        res.json({ total, page: p, pageSize: ps, items: pageItems });
+    }
+    catch (error) {
+        console.error('[API] Erro ao buscar places com filtros:', error);
+        res.status(500).json({ message: 'Failed to fetch places' });
+    }
+});
 // Get all users (admin only)
 app.get('/users', authenticate, async (req, res) => {
     try {
@@ -1232,20 +1271,22 @@ app.post('/places/popular-times/import-once', authenticate, async (req, res) => 
                     popularTimes = await scrapePopularTimes(place.name || place.displayName?.text || '', place.googleMapsUri);
                     log(`Fallback scraping: popularTimes=${!!popularTimes}`);
                 }
-                if (popularTimes) {
+                // Considerar sucesso apenas se for SERPAPI e vierem ambos popularTimes e openingHours
+                const success = !!(fromSerp && fromSerp.popularTimes && fromSerp.openingHours);
+                if (success) {
                     await place.docRef.update({
-                        popularTimes,
-                        ...(openingHours ? { openingHours } : {}),
+                        popularTimes: fromSerp.popularTimes,
+                        openingHours: fromSerp.openingHours,
                         ...(isOpen !== null ? { isOpen } : {}),
-                        dataSource: fromSerp ? 'serpapi' : 'scraped',
-                        popularityProvider: fromSerp ? 'serpapi' : 'scraped',
+                        dataSource: 'serpapi',
+                        popularityProvider: 'serpapi',
                         popularityUpdatedBy: 'auto',
                         popularityAutoDone: true,
                         popularityAutoUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
                         updatedAt: admin.firestore.FieldValue.serverTimestamp()
                     });
                     updated++;
-                    results.push({ id: place.id, name: place.name || place.displayName?.text || '', ok: true, source: fromSerp ? 'serpapi' : 'scraped' });
+                    results.push({ id: place.id, name: place.name || place.displayName?.text || '', ok: true, source: 'serpapi' });
                 }
                 else {
                     failed++;
@@ -1296,37 +1337,24 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req, res) =
             isOpen = fromSerp.isOpen;
             log(`SerpApi: popularTimes=${!!popularTimes}, openingHours=${!!openingHours}, isOpen=${isOpen}`);
         }
-        if (!popularTimes && place.googleMapsUri) {
-            popularTimes = await scrapePopularTimes(place.name || place.displayName?.text || '', place.googleMapsUri);
-            log(`Fallback scraping: popularTimes=${!!popularTimes}`);
-        }
-        if (!popularTimes && place.openingHours) {
-            popularTimes = {
-                monday: Array(24).fill(0),
-                tuesday: Array(24).fill(0),
-                wednesday: Array(24).fill(0),
-                thursday: Array(24).fill(0),
-                friday: Array(24).fill(0),
-                saturday: Array(24).fill(0),
-                sunday: Array(24).fill(0)
-            };
-            log('Sem dados reais, mantendo zeros.');
-        }
-        if (!popularTimes) {
-            res.status(502).json({ message: 'Não foi possível obter Popular Times', logs: logMessages });
+        // Somente considerar SUCESSO se vierem popularTimes E openingHours do SerpApi
+        const success = !!(fromSerp && fromSerp.popularTimes && fromSerp.openingHours);
+        if (!success) {
+            log('Falha: API não retornou conjunto completo (popularTimes + openingHours). Nenhuma atualização foi aplicada.');
+            res.status(502).json({ message: 'API não retornou dados suficientes', logs: logMessages });
             return;
         }
         await ref.update({
-            popularTimes,
-            ...(openingHours ? { openingHours } : {}),
+            popularTimes: fromSerp.popularTimes,
+            openingHours: fromSerp.openingHours,
             ...(isOpen !== null ? { isOpen } : {}),
-            dataSource: fromSerp ? 'serpapi' : 'scraped',
-            popularityProvider: fromSerp ? 'serpapi' : 'scraped',
+            dataSource: 'serpapi',
+            popularityProvider: 'serpapi',
             popularityUpdatedBy: 'manual',
             popularityManualUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-        res.json({ success: true, id: docId, source: fromSerp ? 'serpapi' : 'scraped', logs: logMessages });
+        res.json({ success: true, id: docId, source: 'serpapi', logs: logMessages });
     }
     catch (error) {
         console.error('[Import-One] erro:', error);
