@@ -1327,6 +1327,9 @@ const fetchPopularTimesFromSerpApi = async (
           ? `!4m5!3m4!1s${dataId}!8m2!3d${dLat}!4d${dLng}`
           : `!4m5!3m4!1s${dataId}!8m2`;
         const detailParams: any = { engine: 'google_maps', type: 'place', data: dataParam, hl: 'pt-BR', gl: 'br', api_key: apiKey };
+        if (typeof dLat === 'number' && typeof dLng === 'number') {
+          detailParams.ll = `@${dLat},${dLng},14z`;
+        }
         const detailRes = await axios.get(detailUrl, { params: detailParams, timeout: 20000 });
         console.log('[SerpApi] google_maps type=place by data param status:', detailRes.status, 'has place_results?', !!detailRes?.data?.place_results);
         detail = detailRes?.data?.place_results ? detailRes?.data : detailRes?.data;
@@ -1529,6 +1532,98 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req: expres
   } catch (error: any) {
     console.error('[Import-One] erro:', error);
     res.status(500).json({ message: error?.message || 'Falha na importação manual' });
+  }
+});
+
+// Atualizar horários/avaliações de um único lugar (Google Places Details)
+app.post('/places/:docId/update-hours', authenticate, async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    const { docId } = req.params;
+    if (!docId) {
+      res.status(400).json({ message: 'docId é obrigatório' });
+      return;
+    }
+    const ref = db.collection('places').doc(docId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ message: 'Place não encontrado' });
+      return;
+    }
+    const place = { id: docId, ...(snap.data() as any) } as any;
+    if (!place.placeId) {
+      res.status(400).json({ message: 'Este documento não possui placeId' });
+      return;
+    }
+
+    const apiKey = "AIzaSyAv1QPfxhhYJ-a7czQhXPILtUI3Qz16UAg";
+    const fieldMask = 'regularOpeningHours,currentOpeningHours,displayName,rating,userRatingCount';
+    const detailsUrl = `https://places.googleapis.com/v1/places/${place.placeId}`;
+    const detailsResponse = await fetch(detailsUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': fieldMask
+      }
+    });
+    if (!detailsResponse.ok) {
+      const errorText = await detailsResponse.text().catch(() => '');
+      res.status(502).json({ message: `Google Places error ${detailsResponse.status}`, error: errorText });
+      return;
+    }
+    const details = await detailsResponse.json();
+
+    const extractOpeningHoursLocal = (regularOpeningHours: any) => {
+      if (!regularOpeningHours?.weekdayDescriptions) return null;
+      const hours: any = { monday: null, tuesday: null, wednesday: null, thursday: null, friday: null, saturday: null, sunday: null };
+      const dayMapping: Record<string, string> = {
+        'Segunda-feira': 'monday','Terça-feira': 'tuesday','Quarta-feira': 'wednesday','Quinta-feira': 'thursday','Sexta-feira': 'friday','Sábado': 'saturday','Domingo': 'sunday',
+        'Monday': 'monday','Tuesday': 'tuesday','Wednesday': 'wednesday','Thursday': 'thursday','Friday': 'friday','Saturday': 'saturday','Sunday': 'sunday'
+      };
+      regularOpeningHours.weekdayDescriptions.forEach((desc: string) => {
+        const parts = desc.split(':');
+        if (parts.length < 2) return;
+        const dayName = parts[0].trim();
+        const hoursText = parts.slice(1).join(':').trim();
+        const dayKey = dayMapping[dayName];
+        if (!dayKey) return;
+        if (hoursText.toLowerCase().includes('fechado') || hoursText.toLowerCase().includes('closed')) {
+          hours[dayKey] = { open: null, close: null, closed: true };
+        } else {
+          const m = hoursText.match(/(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})/);
+          if (m) {
+            hours[dayKey] = { open: `${m[1].padStart(2,'0')}:${m[2]}`, close: `${m[3].padStart(2,'0')}:${m[4]}`, closed: false };
+          }
+        }
+      });
+      return hours;
+    };
+
+    const openingHours = extractOpeningHoursLocal(details.regularOpeningHours);
+    const isOpenValue = details.currentOpeningHours ? (details.currentOpeningHours.openNow || null) : null;
+    const rating = typeof details.rating === 'number' ? details.rating : (place.rating ?? null);
+    const userRatingCount = typeof details.userRatingCount === 'number' ? details.userRatingCount : (place.userRatingsTotal ?? 0);
+
+    const updates: any = { updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+    if (openingHours) updates.openingHours = openingHours;
+    if (isOpenValue !== null) updates.isOpen = isOpenValue;
+    if (rating !== null && rating !== undefined) updates.rating = rating;
+    if (typeof userRatingCount === 'number') updates.userRatingsTotal = userRatingCount;
+    if (details.displayName?.text) updates.name = details.displayName.text;
+
+    await ref.update(updates);
+
+    res.json({
+      success: true,
+      updated: {
+        openingHours: !!openingHours,
+        rating: typeof rating === 'number',
+        userRatingsTotal: typeof userRatingCount === 'number'
+      }
+    });
+  } catch (error: any) {
+    console.error('[Update-One-Hours] erro:', error);
+    res.status(500).json({ message: error?.message || 'Falha ao atualizar horários/avaliações' });
   }
 });
 
