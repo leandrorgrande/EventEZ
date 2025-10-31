@@ -105,6 +105,159 @@ app.get('/places', async (req, res) => {
         res.status(500).json({ message: 'Failed to fetch places' });
     }
 });
+// Inserir um novo lugar por nome + cidade via Outscraper Tasks
+app.post('/places/insert-from-outscraper', authenticate, async (req, res) => {
+    try {
+        const { name, city, address } = req.body || {};
+        if (!name || !city) {
+            res.status(400).json({ message: 'Parâmetros obrigatórios: name, city' });
+            return;
+        }
+        const mapCityToLocation = (c) => {
+            const s = String(c || '').toLowerCase();
+            if (s.includes('santos'))
+                return 'BR^>Sao Paulo^>Santos';
+            if (s.includes('são vicente') || s.includes('sao vicente'))
+                return 'BR^>Sao Paulo^>Sao Vicente';
+            if (s.includes('guarujá') || s.includes('guaruja'))
+                return 'BR^>Sao Paulo^>Guaruja';
+            if (s.includes('praia grande'))
+                return 'BR^>Sao Paulo^>Praia Grande';
+            return 'BR';
+        };
+        // Criar task
+        const axios = require('axios');
+        const apiKey = process.env.OUTSCRAPER_API_KEY;
+        if (!apiKey) {
+            res.status(500).json({ message: 'OUTSCRAPER_API_KEY ausente' });
+            return;
+        }
+        const headers = { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' };
+        const base = 'https://api.outscraper.cloud';
+        const payload = {
+            service_name: 'google_maps_service_v2',
+            title: 'insert_place_single',
+            language: 'en',
+            region: 'BR',
+            categories: [name],
+            locations: [mapCityToLocation(city)],
+            limit: 1,
+            exactMatch: false,
+            enrich: false,
+            UISettings: { isCustomQueries: false, isCustomCategories: false, isCustomLocations: false },
+            settings: { output_columns: [], output_extension: 'json' },
+            tags: name
+        };
+        const createRes = await axios.post(`${base}/tasks`, payload, { headers, timeout: 20000 });
+        const taskId = createRes?.data?.id || createRes?.data?.task_id || createRes?.data?.data?.id;
+        if (!taskId) {
+            res.status(502).json({ message: 'Falha ao criar task Outscraper', data: createRes?.data });
+            return;
+        }
+        // Polling
+        const poll = async () => {
+            const starts = Date.now();
+            while (Date.now() - starts < 60000) {
+                try {
+                    const g1 = await axios.get(`${base}/tasks/get`, { headers, params: { id: taskId }, timeout: 15000 });
+                    const st = g1?.data?.status || g1?.data?.data?.status;
+                    if (st && String(st).toLowerCase() === 'finished')
+                        return g1?.data?.results || g1?.data?.data || g1?.data;
+                }
+                catch { }
+                try {
+                    const g2 = await axios.get(`${base}/tasks/get`, { headers, params: { task_id: taskId }, timeout: 15000 });
+                    const st2 = g2?.data?.status || g2?.data?.data?.status;
+                    if (st2 && String(st2).toLowerCase() === 'finished')
+                        return g2?.data?.results || g2?.data?.data || g2?.data;
+                }
+                catch { }
+                await new Promise(r => setTimeout(r, 3000));
+            }
+            return null;
+        };
+        const results = await poll();
+        if (!results) {
+            res.status(502).json({ message: 'Task não retornou resultado em tempo hábil' });
+            return;
+        }
+        // Encontrar o item
+        const findWithPopularTimes = (node) => {
+            if (!node)
+                return null;
+            if (Array.isArray(node)) {
+                for (const el of node) {
+                    const f = findWithPopularTimes(el);
+                    if (f)
+                        return f;
+                }
+                return null;
+            }
+            if (typeof node === 'object') {
+                if (node.popular_times && Array.isArray(node.popular_times))
+                    return node;
+                for (const k of Object.keys(node)) {
+                    const f = findWithPopularTimes(node[k]);
+                    if (f)
+                        return f;
+                }
+            }
+            return null;
+        };
+        const candidate = findWithPopularTimes(results);
+        const item = candidate || (Array.isArray(results) ? results[0] : (results?.[0] || results?.result?.[0] || results?.data?.[0] || results || {}));
+        if (!item || typeof item !== 'object') {
+            res.status(404).json({ message: 'Nenhum item encontrado para inserir' });
+            return;
+        }
+        // Normalizar
+        const popularTimes = normalizePopularTimes(item);
+        const openingHours = normalizeOpeningHoursGeneric(item) || normalizeOpeningHoursGeneric(item?.opening_hours) || null;
+        const subtypes = (typeof item?.subtypes === 'string' ? item.subtypes.split(/\s*,\s*/) : (Array.isArray(item?.subtypes) ? item.subtypes : []));
+        const doc = {
+            placeId: item?.place_id || item?.google_id || null,
+            name: item?.name || name,
+            formattedAddress: item?.full_address || address || null,
+            latitude: item?.latitude != null ? String(item.latitude) : null,
+            longitude: item?.longitude != null ? String(item.longitude) : null,
+            rating: typeof item?.rating === 'number' ? item.rating : null,
+            userRatingsTotal: typeof item?.reviews === 'number' ? item.reviews : 0,
+            types: subtypes || [],
+            openingHours: openingHours || null,
+            popularTimes: popularTimes || null,
+            website: item?.site || item?.website || null,
+            instagram: item?.instagram || null,
+            description: item?.description || null,
+            logoUrl: item?.logo || item?.photo || null,
+            price: item?.price_level || item?.price || null,
+            googleMapsUri: item?.location_link || null,
+            city: city,
+            dataSource: 'outscraper_tasks',
+            popularityProvider: popularTimes ? 'outscraper_tasks' : null,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+        // Dedup por placeId
+        let docId = null;
+        if (doc.placeId) {
+            const snap = await db.collection('places').where('placeId', '==', doc.placeId).limit(1).get();
+            if (!snap.empty) {
+                const ref = snap.docs[0].ref;
+                await ref.update({ ...doc, createdAt: snap.docs[0].data().createdAt || admin.firestore.FieldValue.serverTimestamp() });
+                docId = ref.id;
+                res.json({ success: true, id: docId, action: 'updated', source: 'outscraper_tasks' });
+                return;
+            }
+        }
+        // Inserir
+        const refNew = await db.collection('places').add(doc);
+        res.json({ success: true, id: refNew.id, action: 'inserted', source: 'outscraper_tasks' });
+    }
+    catch (error) {
+        console.error('[Insert-From-Outscraper] erro:', error?.message || error);
+        res.status(500).json({ message: error?.message || 'Falha ao inserir lugar' });
+    }
+});
 // Get all users (admin only)
 app.get('/users', authenticate, async (req, res) => {
     try {
@@ -1770,7 +1923,32 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req, res) =
                         return null;
                     };
                     const results = await poll();
-                    const item = Array.isArray(results) ? results[0] : (results?.[0] || results?.result?.[0] || results?.data?.[0] || results || {});
+                    // Encontrar o primeiro objeto que contenha 'popular_times' dentro do retorno
+                    const findWithPopularTimes = (node) => {
+                        if (!node)
+                            return null;
+                        if (Array.isArray(node)) {
+                            for (const el of node) {
+                                const found = findWithPopularTimes(el);
+                                if (found)
+                                    return found;
+                            }
+                            return null;
+                        }
+                        if (typeof node === 'object') {
+                            if (node.popular_times && Array.isArray(node.popular_times))
+                                return node;
+                            const keys = Object.keys(node);
+                            for (const k of keys) {
+                                const found = findWithPopularTimes(node[k]);
+                                if (found)
+                                    return found;
+                            }
+                        }
+                        return null;
+                    };
+                    const candidate = findWithPopularTimes(results);
+                    const item = candidate || (Array.isArray(results) ? results[0] : (results?.[0] || results?.result?.[0] || results?.data?.[0] || results || {}));
                     if (!item || typeof item !== 'object')
                         return null;
                     const normalized = normalizePopularTimes(item?.popular_times || item?.popularTimes || item);
