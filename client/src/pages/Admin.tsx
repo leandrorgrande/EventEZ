@@ -58,15 +58,38 @@ export default function Admin() {
 
   // Controles de filtro/ordenação/paginação para Places
   const [placesFilter, setPlacesFilter] = useState<'all' | 'semTipo' | 'comTipo'>('all');
-  const [placesSort, setPlacesSort] = useState<'none' | 'manual_desc' | 'auto_desc' | 'manual_asc' | 'auto_asc'>('none');
+  const [dataFilter, setDataFilter] = useState<'all' | 'missingHours' | 'missingRating' | 'missingAny' | 'complete'>('all');
+  const [cityFilter, setCityFilter] = useState<string>('all');
+  const [placeTypeFilter, setPlaceTypeFilter] = useState<string>('all');
+  const [placesSort, setPlacesSort] = useState<'none' | 'manual_desc' | 'auto_desc' | 'manual_asc' | 'auto_asc' | 'rating_desc' | 'rating_asc' | 'reviews_desc' | 'reviews_asc' | 'name_asc' | 'name_desc' | 'updated_desc' | 'updated_asc'>('none');
   const [compactView, setCompactView] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(24);
 
   const filteredSortedPlaces = Array.isArray(allPlaces) ? allPlaces
     .filter((p: any) => {
+      // Filtro por tipo definido manualmente
       if (placesFilter === 'semTipo') return !(p.types && p.types.length);
       if (placesFilter === 'comTipo') return (p.types && p.types.length);
+      // Filtro por tipo de lugar (bar, night_club, restaurant, cafe, ...)
+      if (placeTypeFilter !== 'all') {
+        const tArr = Array.isArray(p.types) ? p.types.map((x: string) => (x || '').toLowerCase()) : [];
+        if (!tArr.includes((placeTypeFilter || '').toLowerCase())) return false;
+      }
+      // Filtro por cidade (por endereço formatado ou campo city, quando existir)
+      if (cityFilter !== 'all') {
+        const addr = String(p.formattedAddress || p.address || '').toLowerCase();
+        const cityVal = String(p.city || '').toLowerCase();
+        const needle = cityFilter.toLowerCase();
+        if (!(addr.includes(needle) || cityVal.includes(needle))) return false;
+      }
+      // Filtros por dados coletados
+      const hasHours = !!p.openingHours;
+      const hasRating = typeof p.rating === 'number';
+      if (dataFilter === 'missingHours' && hasHours) return false;
+      if (dataFilter === 'missingRating' && hasRating) return false;
+      if (dataFilter === 'missingAny' && (hasHours && hasRating)) return false;
+      if (dataFilter === 'complete' && (!hasHours || !hasRating)) return false;
       return true;
     })
     .slice()
@@ -75,11 +98,27 @@ export default function Admin() {
       const bAuto = b.popularityAutoUpdatedAt?._seconds || 0;
       const aManual = a.popularityManualUpdatedAt?._seconds || 0;
       const bManual = b.popularityManualUpdatedAt?._seconds || 0;
+      const aUpdated = a.updatedAt?._seconds || 0;
+      const bUpdated = b.updatedAt?._seconds || 0;
+      const aRating = typeof a.rating === 'number' ? a.rating : -1;
+      const bRating = typeof b.rating === 'number' ? b.rating : -1;
+      const aReviews = typeof a.userRatingsTotal === 'number' ? a.userRatingsTotal : -1;
+      const bReviews = typeof b.userRatingsTotal === 'number' ? b.userRatingsTotal : -1;
+      const aName = (a.name || '').toLowerCase();
+      const bName = (b.name || '').toLowerCase();
       switch (placesSort) {
         case 'manual_desc': return bManual - aManual;
         case 'manual_asc': return aManual - bManual;
         case 'auto_desc': return bAuto - aAuto;
         case 'auto_asc': return aAuto - bAuto;
+        case 'rating_desc': return (bRating - aRating);
+        case 'rating_asc': return (aRating - bRating);
+        case 'reviews_desc': return (bReviews - aReviews);
+        case 'reviews_asc': return (aReviews - bReviews);
+        case 'name_asc': return aName.localeCompare(bName);
+        case 'name_desc': return bName.localeCompare(aName);
+        case 'updated_desc': return bUpdated - aUpdated;
+        case 'updated_asc': return aUpdated - bUpdated;
         default: return 0;
       }
     }) : [];
@@ -654,6 +693,57 @@ export default function Admin() {
                       </SelectContent>
                     </Select>
                   </div>
+                {/* Filtro de dados (horários/avaliação) */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-300">Dados:</span>
+                  <Select value={dataFilter} onValueChange={(v) => { setPage(1); setDataFilter(v as any); }}>
+                    <SelectTrigger className="h-8 bg-slate-600 border-slate-500 text-white w-52">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-700 border-slate-600 text-white">
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="missingAny">Faltando horários OU avaliação</SelectItem>
+                      <SelectItem value="missingHours">Faltando horários</SelectItem>
+                      <SelectItem value="missingRating">Faltando avaliação</SelectItem>
+                      <SelectItem value="complete">Completos (ambos)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {/* Filtro de Cidade */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-300">Cidade:</span>
+                  <Select value={cityFilter} onValueChange={(v) => { setPage(1); setCityFilter(v); }}>
+                    <SelectTrigger className="h-8 bg-slate-600 border-slate-500 text-white w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-700 border-slate-600 text-white">
+                      <SelectItem value="all">Todas</SelectItem>
+                      <SelectItem value="Santos">Santos</SelectItem>
+                      <SelectItem value="São Vicente">São Vicente</SelectItem>
+                      <SelectItem value="Guarujá">Guarujá</SelectItem>
+                      <SelectItem value="Praia Grande">Praia Grande</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {/* Filtro de Tipo (igual à página principal) */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-300">Tipo:</span>
+                  <Select value={placeTypeFilter} onValueChange={(v) => { setPage(1); setPlaceTypeFilter(v); }}>
+                    <SelectTrigger className="h-8 bg-slate-600 border-slate-500 text-white w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-700 border-slate-600 text-white">
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="bar">bar</SelectItem>
+                      <SelectItem value="night_club">night_club</SelectItem>
+                      <SelectItem value="restaurant">restaurant</SelectItem>
+                      <SelectItem value="cafe">cafe</SelectItem>
+                      <SelectItem value="bakery">bakery</SelectItem>
+                      <SelectItem value="movie_theater">movie_theater</SelectItem>
+                      <SelectItem value="amusement_park">amusement_park</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                   {/* Ordenação */}
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-300">Ordenar por:</span>
@@ -667,6 +757,14 @@ export default function Admin() {
                         <SelectItem value="manual_asc">Manual: mais antigo</SelectItem>
                         <SelectItem value="auto_desc">Auto: mais recente</SelectItem>
                         <SelectItem value="auto_asc">Auto: mais antigo</SelectItem>
+                      <SelectItem value="updated_desc">Atualizado: mais recente</SelectItem>
+                      <SelectItem value="updated_asc">Atualizado: mais antigo</SelectItem>
+                      <SelectItem value="rating_desc">Rating: maior</SelectItem>
+                      <SelectItem value="rating_asc">Rating: menor</SelectItem>
+                      <SelectItem value="reviews_desc">Reviews: maior</SelectItem>
+                      <SelectItem value="reviews_asc">Reviews: menor</SelectItem>
+                      <SelectItem value="name_asc">Nome: A → Z</SelectItem>
+                      <SelectItem value="name_desc">Nome: Z → A</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
