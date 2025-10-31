@@ -1630,6 +1630,8 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req, res) =
         let providerUsed = null;
         let priceVal = null;
         if (providerPref === 'outscraper') {
+            log(`Provider forçado: outscraper`);
+            log(`Params: name="${place.name || place.displayName?.text || ''}", address="${place.formattedAddress || ''}", placeId="${place.placeId || ''}"`);
             const fromOut = await fetchPopularTimesFromOutscraper(place.name || place.displayName?.text || '', place.formattedAddress, place.placeId || null);
             if (fromOut) {
                 popularTimes = fromOut.popularTimes;
@@ -1641,6 +1643,8 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req, res) =
             }
         }
         else {
+            log(`Provider primário: serpapi`);
+            log(`Params: name="${place.name || place.displayName?.text || ''}", address="${place.formattedAddress || ''}", placeId="${place.placeId || ''}", lat=${latNum}, lng=${lngNum}`);
             const fromSerp = await fetchPopularTimesFromSerpApi(place.name || place.displayName?.text || '', place.formattedAddress, place.placeId || null, latNum, lngNum);
             if (fromSerp) {
                 popularTimes = fromSerp.popularTimes;
@@ -1651,6 +1655,7 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req, res) =
                 log(`SerpApi: popularTimes=${!!popularTimes}, openingHours=${!!openingHours}, isOpen=${isOpen}`);
             }
             if (!popularTimes || !openingHours) {
+                log('Fallback: outscraper');
                 const fromOut = await fetchPopularTimesFromOutscraper(place.name || place.displayName?.text || '', place.formattedAddress, place.placeId || null);
                 if (fromOut) {
                     if (!popularTimes)
