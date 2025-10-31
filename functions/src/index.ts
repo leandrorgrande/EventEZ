@@ -1782,6 +1782,13 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req: expres
             price: item?.price_level || item?.price || null,
             description: item?.description || null,
             logoUrl: item?.logo || item?.photo || null,
+            rating: typeof item?.rating === 'number' ? item.rating : null,
+            userRatingsTotal: typeof item?.reviews === 'number' ? item.reviews : null,
+            formattedAddress: item?.full_address || null,
+            city: item?.city || null,
+            googleMapsUri: item?.location_link || null,
+            placeId: item?.place_id || null,
+            types: (typeof item?.subtypes === 'string' ? item.subtypes.split(/\s*,\s*/) : (Array.isArray(item?.subtypes) ? item.subtypes : null)) || null
           };
           return { popularTimes: normalized, openingHours, fields };
         } catch (e) { return null; }
@@ -1813,6 +1820,13 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req: expres
         if (f.price && !updates.price) updates.price = f.price;
         if (f.description) updates.description = f.description;
         if (f.logoUrl) updates.logoUrl = f.logoUrl;
+        if (typeof f.rating === 'number') updates.rating = f.rating;
+        if (typeof f.userRatingsTotal === 'number') updates.userRatingsTotal = f.userRatingsTotal;
+        if (f.formattedAddress) updates.formattedAddress = f.formattedAddress;
+        if (f.city) updates.city = f.city;
+        if (f.googleMapsUri) updates.googleMapsUri = f.googleMapsUri;
+        if (f.placeId && !place.placeId) updates.placeId = f.placeId;
+        if (Array.isArray(f.types) && f.types.length) updates.types = f.types;
         await ref.update(updates);
         res.json({ success: true, id: docId, source: 'outscraper_tasks', logs: logMessages });
         return;

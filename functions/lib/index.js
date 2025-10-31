@@ -1703,9 +1703,152 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req, res) =
         }
         const success = !!(popularTimes || openingHours);
         if (!success) {
-            log('APIs não retornaram dados suficientes');
-            res.status(502).json({ message: 'APIs não retornaram dados suficientes', logs: logMessages });
-            return;
+            // Tentar Outscraper Cloud Tasks (consulta individual por nome/local) como último recurso
+            const buildLocation = (addr) => {
+                const a = (addr || '').toLowerCase();
+                if (a.includes('santos'))
+                    return 'BR^>Sao Paulo^>Santos';
+                if (a.includes('são vicente') || a.includes('sao vicente'))
+                    return 'BR^>Sao Paulo^>Sao Vicente';
+                if (a.includes('guarujá') || a.includes('guaruja'))
+                    return 'BR^>Sao Paulo^>Guaruja';
+                if (a.includes('praia grande'))
+                    return 'BR^>Sao Paulo^>Praia Grande';
+                return 'BR';
+            };
+            const taskRes = await (async () => {
+                // Implementação inline do task fetcher, evitando refs externas
+                try {
+                    const axios = require('axios');
+                    const apiKey = process.env.OUTSCRAPER_API_KEY;
+                    if (!apiKey)
+                        return null;
+                    const headers = { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' };
+                    const base = 'https://api.outscraper.cloud';
+                    const payload = {
+                        service_name: 'google_maps_service_v2',
+                        title: 'popular_times_single',
+                        language: 'en',
+                        region: 'BR',
+                        categories: [place.name || place.displayName?.text || ''],
+                        locations: [buildLocation(place.formattedAddress)],
+                        limit: 1,
+                        exactMatch: false,
+                        enrich: false,
+                        UISettings: { isCustomQueries: false, isCustomCategories: false, isCustomLocations: false },
+                        settings: { output_columns: [], output_extension: 'json' },
+                        tags: place.name || ''
+                    };
+                    const createRes = await axios.post(`${base}/tasks`, payload, { headers, timeout: 20000 });
+                    const taskId = createRes?.data?.id || createRes?.data?.task_id || createRes?.data?.data?.id;
+                    if (!taskId)
+                        return null;
+                    const poll = async () => {
+                        const starts = Date.now();
+                        while (Date.now() - starts < 60000) {
+                            try {
+                                const g1 = await axios.get(`${base}/tasks/get`, { headers, params: { id: taskId }, timeout: 15000 });
+                                const st = g1?.data?.status || g1?.data?.data?.status;
+                                if (st && String(st).toLowerCase() === 'finished')
+                                    return g1?.data?.results || g1?.data?.data || g1?.data;
+                            }
+                            catch { }
+                            try {
+                                const g2 = await axios.get(`${base}/tasks/get`, { headers, params: { task_id: taskId }, timeout: 15000 });
+                                const st2 = g2?.data?.status || g2?.data?.data?.status;
+                                if (st2 && String(st2).toLowerCase() === 'finished')
+                                    return g2?.data?.results || g2?.data?.data || g2?.data;
+                            }
+                            catch { }
+                            await new Promise(r => setTimeout(r, 3000));
+                        }
+                        return null;
+                    };
+                    const results = await poll();
+                    const item = Array.isArray(results) ? results[0] : (results?.[0] || results?.result?.[0] || results?.data?.[0] || results || {});
+                    if (!item || typeof item !== 'object')
+                        return null;
+                    const normalized = normalizePopularTimes(item?.popular_times || item?.popularTimes || item);
+                    const openingHours = normalizeOpeningHoursGeneric(item) || normalizeOpeningHoursGeneric(item?.opening_hours) || null;
+                    const fields = {
+                        website: item?.site || item?.website || null,
+                        instagram: item?.instagram || (Array.isArray(item?.socials) ? (item.socials.find((s) => /instagram\.com/i.test(s)) || null) : null),
+                        reservationLinks: item?.reservation_links || item?.booking_appointment_link || null,
+                        price: item?.price_level || item?.price || null,
+                        description: item?.description || null,
+                        logoUrl: item?.logo || item?.photo || null,
+                        rating: typeof item?.rating === 'number' ? item.rating : null,
+                        userRatingsTotal: typeof item?.reviews === 'number' ? item.reviews : null,
+                        formattedAddress: item?.full_address || null,
+                        city: item?.city || null,
+                        googleMapsUri: item?.location_link || null,
+                        placeId: item?.place_id || null,
+                        types: (typeof item?.subtypes === 'string' ? item.subtypes.split(/\s*,\s*/) : (Array.isArray(item?.subtypes) ? item.subtypes : null)) || null
+                    };
+                    return { popularTimes: normalized, openingHours, fields };
+                }
+                catch (e) {
+                    return null;
+                }
+            })();
+            if (taskRes) {
+                if (!popularTimes)
+                    popularTimes = taskRes.popularTimes;
+                if (!openingHours)
+                    openingHours = taskRes.openingHours;
+                log(`Outscraper tasks: popularTimes=${!!taskRes.popularTimes}, openingHours=${!!taskRes.openingHours}`);
+                if (!popularTimes && !openingHours) {
+                    log('APIs não retornaram dados suficientes');
+                    res.status(502).json({ message: 'APIs não retornaram dados suficientes', logs: logMessages });
+                    return;
+                }
+                // Atualizar com campos ricos
+                const updates = {
+                    ...(popularTimes ? { popularTimes } : {}),
+                    ...(openingHours ? { openingHours } : {}),
+                    ...(isOpen !== null ? { isOpen } : {}),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    popularityProvider: 'outscraper_tasks',
+                    dataSource: 'outscraper_tasks',
+                    popularityUpdatedBy: 'manual',
+                    popularityManualUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                };
+                const f = taskRes.fields || {};
+                if (f.website)
+                    updates.website = f.website;
+                if (f.instagram)
+                    updates.instagram = f.instagram;
+                if (f.reservationLinks)
+                    updates.reservationLinks = f.reservationLinks;
+                if (f.price && !updates.price)
+                    updates.price = f.price;
+                if (f.description)
+                    updates.description = f.description;
+                if (f.logoUrl)
+                    updates.logoUrl = f.logoUrl;
+                if (typeof f.rating === 'number')
+                    updates.rating = f.rating;
+                if (typeof f.userRatingsTotal === 'number')
+                    updates.userRatingsTotal = f.userRatingsTotal;
+                if (f.formattedAddress)
+                    updates.formattedAddress = f.formattedAddress;
+                if (f.city)
+                    updates.city = f.city;
+                if (f.googleMapsUri)
+                    updates.googleMapsUri = f.googleMapsUri;
+                if (f.placeId && !place.placeId)
+                    updates.placeId = f.placeId;
+                if (Array.isArray(f.types) && f.types.length)
+                    updates.types = f.types;
+                await ref.update(updates);
+                res.json({ success: true, id: docId, source: 'outscraper_tasks', logs: logMessages });
+                return;
+            }
+            else {
+                log('APIs não retornaram dados suficientes');
+                res.status(502).json({ message: 'APIs não retornaram dados suficientes', logs: logMessages });
+                return;
+            }
         }
         await ref.update({
             ...(popularTimes ? { popularTimes } : {}),
