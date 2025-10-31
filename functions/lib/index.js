@@ -925,9 +925,14 @@ const normalizePopularTimes = (raw) => {
         sunday: Array(24).fill(0)
     };
     const mapDayName = (name) => {
-        if (!name)
+        if (name === undefined || name === null)
             return null;
-        const n = name.toLowerCase();
+        // Suporte a numérico (1..7) vindo do Outscraper: 1=Mon .. 7=Sun
+        if (typeof name === 'number') {
+            const mapNum = { 1: 'monday', 2: 'tuesday', 3: 'wednesday', 4: 'thursday', 5: 'friday', 6: 'saturday', 7: 'sunday' };
+            return mapNum[name] || null;
+        }
+        const n = String(name).toLowerCase();
         if (n.startsWith('mon'))
             return 'monday';
         if (n.startsWith('tue'))
@@ -1048,10 +1053,10 @@ const normalizePopularTimes = (raw) => {
     const arr = raw.popular_times || raw.populartimes || raw;
     if (Array.isArray(arr)) {
         arr.forEach((dayObj) => {
-            const key = mapDayName(dayObj?.name || dayObj?.day || dayObj?.weekday);
+            const key = mapDayName(dayObj?.day_text || dayObj?.name || dayObj?.weekday || dayObj?.day);
             if (!key || !dayKeys.includes(key))
                 return;
-            const data = dayObj?.data || dayObj?.hours || dayObj?.popularity || [];
+            const data = dayObj?.popular_times || dayObj?.data || dayObj?.hours || dayObj?.popularity || [];
             if (Array.isArray(data)) {
                 data.forEach((entry, idx) => {
                     if (typeof entry === 'number') {
