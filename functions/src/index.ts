@@ -1338,6 +1338,7 @@ const fetchPopularTimesFromOutscraper = async (
   name: string,
   address?: string,
   placeIdRaw?: string | null,
+  googleMapsUri?: string | null,
 ): Promise<{ popularTimes: any | null; openingHours: any | null; isOpen: boolean | null; price?: string | null } | null> => {
   try {
     const axios = require('axios');
@@ -1347,8 +1348,16 @@ const fetchPopularTimesFromOutscraper = async (
     const baseUrl = 'https://api.app.outscraper.com/maps/places-details';
     const params: any = {};
     const placeId = (placeIdRaw || '').startsWith('places/') ? (placeIdRaw as string).slice(7) : (placeIdRaw || '');
-    // Conforme docs: aceitar query OU place_id; forçar fields necessários e resposta síncrona
-    if (placeId) params.place_id = placeId; else params.query = address ? `${name} ${address}` : name;
+    // Conforme docs: popular_times funciona em buscas individuais (place_id ou ID/URL);
+    // Estratégia: tentar por place_id; se não, por URL do Google Maps; se não, por "name + address"
+    if (placeId) {
+      params.place_id = placeId;
+    } else if (googleMapsUri) {
+      params.query = googleMapsUri;
+      params.plain = true;
+    } else {
+      params.query = address ? `${name} ${address}` : name;
+    }
     params.language = 'pt-BR';
     params.region = 'BR';
     params.limit = 1;
@@ -1361,7 +1370,27 @@ const fetchPopularTimesFromOutscraper = async (
     // isOpen nem sempre vem; deixar null se não houver
     const isOpen = typeof item?.opening_hours?.open_now === 'boolean' ? !!item?.opening_hours?.open_now : null;
     const price = item?.price_level || item?.price || null;
-    return { popularTimes: normalized, openingHours, isOpen, price };
+    if (normalized || openingHours) {
+      return { popularTimes: normalized, openingHours, isOpen, price };
+    }
+    // Fallback extra: tentar via URL construída por place_id (plain)
+    if (placeId) {
+      try {
+        const params2: any = { language: 'en', region: 'BR', limit: 1, async: false, fields: params.fields };
+        params2.query = `https://www.google.com/maps/place/?q=place_id:${placeId}`;
+        params2.plain = true;
+        const resp2 = await axios.get(baseUrl, { headers, params: params2, timeout: 25000 });
+        const item2 = Array.isArray(resp2?.data) ? resp2.data[0] : (resp2?.data?.data?.[0] || resp2?.data || {});
+        const norm2 = normalizePopularTimes(item2?.popular_times || item2?.popularTimes || item2);
+        const open2 = normalizeOpeningHoursGeneric(item2) || normalizeOpeningHoursGeneric(item2?.opening_hours) || null;
+        const isOpen2 = typeof item2?.opening_hours?.open_now === 'boolean' ? !!item2?.opening_hours?.open_now : null;
+        const price2 = item2?.price_level || item2?.price || null;
+        if (norm2 || open2) return { popularTimes: norm2, openingHours: open2, isOpen: isOpen2, price: price2 };
+      } catch (e) {
+        // ignora e cai para erro geral
+      }
+    }
+    return { popularTimes: null, openingHours: null, isOpen: isOpen, price };
   } catch (e: any) {
     console.warn('[Outscraper] erro:', e?.response?.status, e?.response?.data || e?.message || e);
     return null;
@@ -1562,6 +1591,7 @@ app.post('/places/popular-times/import-once', authenticate, async (req: express.
             place.name || place.displayName?.text || '',
             place.formattedAddress,
             place.placeId || null,
+            place.googleMapsUri || null,
           );
           if (fromOut) {
             if (!popularTimes) popularTimes = fromOut.popularTimes;
@@ -1641,6 +1671,7 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req: expres
         place.name || place.displayName?.text || '',
         place.formattedAddress,
         place.placeId || null,
+        place.googleMapsUri || null,
       );
       if (fromOut) {
         popularTimes = fromOut.popularTimes;
@@ -1670,10 +1701,11 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req: expres
       }
       if (!popularTimes || !openingHours) {
         log('Fallback: outscraper');
-        const fromOut = await fetchPopularTimesFromOutscraper(
+          const fromOut = await fetchPopularTimesFromOutscraper(
           place.name || place.displayName?.text || '',
           place.formattedAddress,
-          place.placeId || null,
+            place.placeId || null,
+            place.googleMapsUri || null,
         );
         if (fromOut) {
           if (!popularTimes) popularTimes = fromOut.popularTimes;
