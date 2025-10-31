@@ -807,7 +807,23 @@ export default function MapaCalor() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => searchPlacesMutation.mutate('bars')}
+                onClick={async () => {
+                  try {
+                    const center = map?.getCenter?.();
+                    if (center) {
+                      await searchPlacesMutation.mutateAsync({
+                        locationType: 'bars',
+                        center: { latitude: center.lat(), longitude: center.lng() },
+                        radiusMeters: 900,
+                        rank: 'DISTANCE'
+                      } as any);
+                    } else {
+                      searchPlacesMutation.mutate('bars');
+                    }
+                  } catch (e) {
+                    console.error('[MapaCalor] + Bares erro:', e);
+                  }
+                }}
                 disabled={searchPlacesMutation.isPending}
                 className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
               >
@@ -816,7 +832,23 @@ export default function MapaCalor() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => searchPlacesMutation.mutate('clubs')}
+                onClick={async () => {
+                  try {
+                    const center = map?.getCenter?.();
+                    if (center) {
+                      await searchPlacesMutation.mutateAsync({
+                        locationType: 'clubs',
+                        center: { latitude: center.lat(), longitude: center.lng() },
+                        radiusMeters: 900,
+                        rank: 'DISTANCE'
+                      } as any);
+                    } else {
+                      searchPlacesMutation.mutate('clubs');
+                    }
+                  } catch (e) {
+                    console.error('[MapaCalor] + Baladas erro:', e);
+                  }
+                }}
                 disabled={searchPlacesMutation.isPending}
                 className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
               >
@@ -825,7 +857,23 @@ export default function MapaCalor() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => searchPlacesMutation.mutate('food')}
+                onClick={async () => {
+                  try {
+                    const center = map?.getCenter?.();
+                    if (center) {
+                      await searchPlacesMutation.mutateAsync({
+                        locationType: 'food',
+                        center: { latitude: center.lat(), longitude: center.lng() },
+                        radiusMeters: 900,
+                        rank: 'DISTANCE'
+                      } as any);
+                    } else {
+                      searchPlacesMutation.mutate('food');
+                    }
+                  } catch (e) {
+                    console.error('[MapaCalor] + Restaurantes erro:', e);
+                  }
+                }}
                 disabled={searchPlacesMutation.isPending}
                 className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
               >
@@ -834,7 +882,23 @@ export default function MapaCalor() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => searchPlacesMutation.mutate('cafe')}
+                onClick={async () => {
+                  try {
+                    const center = map?.getCenter?.();
+                    if (center) {
+                      await searchPlacesMutation.mutateAsync({
+                        locationType: 'cafe',
+                        center: { latitude: center.lat(), longitude: center.lng() },
+                        radiusMeters: 900,
+                        rank: 'DISTANCE'
+                      } as any);
+                    } else {
+                      searchPlacesMutation.mutate('cafe');
+                    }
+                  } catch (e) {
+                    console.error('[MapaCalor] + Cafés erro:', e);
+                  }
+                }}
                 disabled={searchPlacesMutation.isPending}
                 className="bg-slate-700 border-slate-600 text-white hover:bg-slate-600"
               >

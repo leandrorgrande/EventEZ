@@ -41,6 +41,7 @@ export default function Admin() {
   const [manualGoogleMapsUrl, setManualGoogleMapsUrl] = useState('');
   const [debugEventsData, setDebugEventsData] = useState<any>(null);
   const [isLoadingDebug, setIsLoadingDebug] = useState(false);
+  const [updatePlaceLogs, setUpdatePlaceLogs] = useState<Record<string, string[]>>({});
   const { data: allPlaces = [], refetch: refetchPlaces } = useQuery({
     queryKey: ["/api/places-admin"],
     enabled: true,
@@ -374,6 +375,30 @@ export default function Admin() {
     onError: (err: any) => toast({ title: 'Erro na importação (linha)', description: err.message || String(err), variant: 'destructive' })
   });
 
+  // Import Popular Times (linha) via Outscraper (forçado)
+  const importOneOutscraperMutation = useMutation({
+    mutationFn: async (docId: string) => {
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      const resp = await fetch(`${API_URL}/places/${docId}/popular-times/import?provider=outscraper`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({})
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
+      return data;
+    },
+    onSuccess: (data: any) => {
+      toast({ title: 'Importação (linha) concluída', description: data?.source ? `Fonte: ${data.source}` : 'OK' });
+      refetchPlaces();
+    },
+    onError: (err: any) => toast({ title: 'Erro na importação (linha)', description: err.message || String(err), variant: 'destructive' })
+  });
+
   // Atualizar horários/avaliações (por lugar)
   const updateHoursMutation = useMutation({
     mutationFn: async (docId: string) => {
@@ -393,6 +418,10 @@ export default function Admin() {
     onSuccess: (data: any) => {
       const u = data?.updated || {};
       toast({ title: 'Horários/avaliações atualizados', description: `horários: ${u.openingHours ? 'ok' : '—'} • rating: ${u.rating ? 'ok' : '—'} • reviews: ${u.userRatingsTotal ? 'ok' : '—'}` });
+      // Guardar logs por docId, se disponíveis
+      if (data?.logs && Array.isArray(data.logs) && data?.id) {
+        setUpdatePlaceLogs(prev => ({ ...prev, [data.id]: data.logs }));
+      }
       refetchPlaces();
     },
     onError: (err: any) => toast({ title: 'Erro ao atualizar', description: err.message || String(err), variant: 'destructive' })
@@ -712,6 +741,9 @@ export default function Admin() {
                             <Button variant="secondary" size="sm" onClick={() => importOnePopularityMutation.mutate({ docId: p.id, apiKey: serpApiKey || undefined })}>
                               <Download className="h-4 w-4 mr-1" /> Buscar API (linha)
                             </Button>
+                            <Button variant="secondary" size="sm" onClick={() => importOneOutscraperMutation.mutate(p.id)} disabled={importOneOutscraperMutation.isPending}>
+                              <Download className="h-4 w-4 mr-1" /> Buscar via Outscraper
+                            </Button>
                             <Button variant="outline" size="sm" onClick={() => updateHoursMutation.mutate(p.id)} disabled={updateHoursMutation.isPending}>
                               <Clock className="h-4 w-4 mr-1" /> Atualizar horários/avaliações
                             </Button>
@@ -721,12 +753,21 @@ export default function Admin() {
                           </div>
                         </div>
                         <div className="mt-2 text-xs text-gray-400">rating: {p.rating ?? '—'} • reviews: {p.userRatingsTotal ?? 0}</div>
-                        {(!p.openingHours || !p.rating) && (
+                        {(!p.openingHours || !p.rating) ? (
                           <div className="mt-1 text-[11px]">
                             {!p.openingHours && <span className="text-yellow-400 mr-2">• faltam horários</span>}
                             {!p.rating && <span className="text-yellow-400">• falta avaliação</span>}
                           </div>
+                        ) : (
+                          <div className="mt-1 text-[11px] text-green-400">• dados de horários/avaliação ok</div>
                         )}
+                        {updatePlaceLogs[p.id]?.length ? (
+                          <div className="mt-2 text-[11px] text-gray-300 space-y-1">
+                            {updatePlaceLogs[p.id].map((line, idx) => (
+                              <div key={idx}>- {line}</div>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>
