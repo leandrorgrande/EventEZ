@@ -1832,10 +1832,21 @@ app.post('/places/update-all-hours', authenticate, async (req: express.Request, 
     
     // Buscar todos os lugares
     const placesSnapshot = await db.collection('places').get();
-    const places = placesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+    let places = placesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
     
     console.log(`[API] Encontrados ${places.length} lugares no Firestore`);
     
+    // Filtro para evitar repetir os mesmos registros
+    const maxAgeHours = Math.max(0, Math.min(720, parseInt(String((req.body as any)?.maxAgeHours ?? '24'), 10) || 24));
+    const cutoff = Date.now() - maxAgeHours * 60 * 60 * 1000;
+    const toMillis = (ts: any): number => ts?.toMillis ? ts.toMillis() : (ts?._seconds ? ts._seconds * 1000 : 0);
+    places = places.filter((p: any) => {
+      const last = toMillis(p.hoursUpdatedAt);
+      return !last || last < cutoff; // só processa quem nunca foi atualizado ou está "antigo"
+    })
+    // ordenar para pegar os mais antigos primeiro
+    .sort((a: any, b: any) => (toMillis(a.hoursUpdatedAt) || 0) - (toMillis(b.hoursUpdatedAt) || 0));
+
     // Função helper para extrair horários (reutilizar do código acima)
     const extractOpeningHoursLocal = (regularOpeningHours: any) => {
       if (!regularOpeningHours?.weekdayDescriptions) return null;
@@ -1947,6 +1958,8 @@ app.post('/places/update-all-hours', authenticate, async (req: express.Request, 
           userRatingsTotal: userRatingCount,
           // opcional: atualizar nome se vier do details
           ...(placeDetails.displayName?.text ? { name: placeDetails.displayName.text } : {}),
+          hoursUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          hoursUpdatedBy: 'auto',
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
         
@@ -1988,9 +2001,22 @@ app.post('/places/update-all-hours-stream', authenticate, async (req: express.Re
 
     // Buscar todos os lugares
     const placesSnapshot = await db.collection('places').get();
-    const places = placesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+    let places = placesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
 
-    send({ type: 'start', total: places.length });
+    // Aplicar filtro de "não repetir" baseado em hoursUpdatedAt
+    const toMillis = (ts: any): number => ts?.toMillis ? ts.toMillis() : (ts?._seconds ? ts._seconds * 1000 : 0);
+    const body = (req.body as any) || {};
+    const query = (req.query as any) || {};
+    const maxAgeHours = Math.max(0, Math.min(720, parseInt(String(body.maxAgeHours ?? query.maxAgeHours ?? '24'), 10) || 24));
+    const limit = Math.max(0, Math.min(2000, parseInt(String(body.limit ?? query.limit ?? '0'), 10) || 0));
+    const cutoff = Date.now() - maxAgeHours * 60 * 60 * 1000;
+    let pending = places.filter((p: any) => {
+      const last = toMillis(p.hoursUpdatedAt);
+      return !last || last < cutoff; // só processa quem nunca foi atualizado ou está antigo
+    }).sort((a: any, b: any) => (toMillis(a.hoursUpdatedAt) || 0) - (toMillis(b.hoursUpdatedAt) || 0));
+    if (limit > 0) pending = pending.slice(0, limit);
+
+    send({ type: 'start', total: pending.length });
 
     let updatedCount = 0;
     let errorCount = 0;
@@ -1999,13 +2025,13 @@ app.post('/places/update-all-hours-stream', authenticate, async (req: express.Re
 
     const fieldMask = 'regularOpeningHours,currentOpeningHours,displayName,rating,userRatingCount';
 
-    for (let i = 0; i < places.length; i++) {
+    for (let i = 0; i < pending.length; i++) {
       if (cancelled) {
-        send({ type: 'cancelled', updated: updatedCount, errors: errorCount, total: places.length });
+        send({ type: 'cancelled', updated: updatedCount, errors: errorCount, total: pending.length });
         res.end();
         return;
       }
-      const place = places[i];
+      const place = pending[i];
       const placeName = place.name;
       const placeId = place.placeId;
       try {
@@ -2067,19 +2093,21 @@ app.post('/places/update-all-hours-stream', authenticate, async (req: express.Re
           rating,
           userRatingsTotal: userRatingCount,
           ...(placeDetails.displayName?.text ? { name: placeDetails.displayName.text } : {}),
+          hoursUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          hoursUpdatedBy: 'auto-stream',
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 
         updatedCount++;
-        send({ type: 'progress', index: i + 1, total: places.length, placeName, status: 'updated' });
+        send({ type: 'progress', index: i + 1, total: pending.length, placeName, status: 'updated' });
         await new Promise(resolve => setTimeout(resolve, 400));
       } catch (err: any) {
         errorCount++;
-        send({ type: 'progress', index: i + 1, total: places.length, placeName, status: 'error', reason: err?.message || String(err) });
+        send({ type: 'progress', index: i + 1, total: pending.length, placeName, status: 'error', reason: err?.message || String(err) });
       }
     }
 
-    send({ type: 'end', updated: updatedCount, errors: errorCount, total: places.length });
+    send({ type: 'end', updated: updatedCount, errors: errorCount, total: pending.length });
     res.end();
   } catch (error) {
     console.error('[API] Erro geral (stream):', error);
@@ -2366,4 +2394,4 @@ app.post('/places/scrape-popular-times', authenticate, async (req: express.Reque
 });
 
 // Export all functions
-export const api = onRequest({ region: 'us-central1', secrets: [SERPAPI_API_KEY, OUTSCRAPER_API_KEY] }, app);
+export const api = onRequest({ region: 'us-central1', timeoutSeconds: 540, secrets: [SERPAPI_API_KEY, OUTSCRAPER_API_KEY] }, app);
