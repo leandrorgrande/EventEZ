@@ -956,7 +956,7 @@ export default function MapaCalor() {
                     const token = await auth.currentUser?.getIdToken();
                     const controller = new AbortController();
                     updateAbortRef.current = controller;
-                    const resp = await fetch(`${API_URL}/places/update-all-hours-stream`, {
+                    const resp = await fetch(`${API_URL}/places/update-all-hours-stream?maxAgeHours=0&limit=300`, {
                       method: 'POST',
                       headers: token ? { 'Authorization': `Bearer ${token}`, 'Accept': 'text/event-stream' } : { 'Accept': 'text/event-stream' },
                       signal: controller.signal
