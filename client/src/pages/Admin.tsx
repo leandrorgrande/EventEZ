@@ -454,12 +454,13 @@ export default function Admin() {
       if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
       return data;
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: any, docId: string) => {
       const u = data?.updated || {};
       toast({ title: 'Horários/avaliações atualizados', description: `horários: ${u.openingHours ? 'ok' : '—'} • rating: ${u.rating ? 'ok' : '—'} • reviews: ${u.userRatingsTotal ? 'ok' : '—'}` });
       // Guardar logs por docId, se disponíveis
-      if (data?.logs && Array.isArray(data.logs) && data?.id) {
-        setUpdatePlaceLogs(prev => ({ ...prev, [data.id]: data.logs }));
+      const key = data?.id || docId;
+      if (data?.logs && Array.isArray(data.logs) && key) {
+        setUpdatePlaceLogs(prev => ({ ...prev, [key]: data.logs }));
       }
       refetchPlaces();
     },
