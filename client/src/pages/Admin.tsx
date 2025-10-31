@@ -61,11 +61,13 @@ export default function Admin() {
   const [dataFilter, setDataFilter] = useState<'all' | 'missingHours' | 'missingRating' | 'missingAny' | 'complete'>('all');
   const [cityFilter, setCityFilter] = useState<string>('all');
   const [placeTypeFilter, setPlaceTypeFilter] = useState<string>('all');
-  const [placesSort, setPlacesSort] = useState<'none' | 'manual_desc' | 'auto_desc' | 'manual_asc' | 'auto_asc' | 'rating_desc' | 'rating_asc' | 'reviews_desc' | 'reviews_asc' | 'name_asc' | 'name_desc' | 'updated_desc' | 'updated_asc'>('none');
+  const [placesSort, setPlacesSort] = useState<'none' | 'manual_desc' | 'auto_desc' | 'manual_asc' | 'auto_asc' | 'rating_desc' | 'rating_asc' | 'reviews_desc' | 'reviews_asc' | 'name_asc' | 'name_desc' | 'updated_desc' | 'updated_asc' | 'hours_desc' | 'hours_asc'>('none');
+  const [dateFilter, setDateFilter] = useState<'all' | 'neverHours' | 'neverPopAuto' | 'neverPopManual'>('all');
   const [compactView, setCompactView] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(24);
 
+  const toMillis = (ts: any): number => ts?.toMillis ? ts.toMillis() : (ts?._seconds ? ts._seconds * 1000 : 0);
   const filteredSortedPlaces = Array.isArray(allPlaces) ? allPlaces
     .filter((p: any) => {
       // Filtro por tipo definido manualmente
@@ -90,16 +92,22 @@ export default function Admin() {
       if (dataFilter === 'missingRating' && hasRating) return false;
       if (dataFilter === 'missingAny' && (hasHours && hasRating)) return false;
       if (dataFilter === 'complete' && (!hasHours || !hasRating)) return false;
+      // Filtro por datas específicas
+      if (dateFilter === 'neverHours' && toMillis(p.hoursUpdatedAt)) return false;
+      if (dateFilter === 'neverPopAuto' && toMillis(p.popularityAutoUpdatedAt)) return false;
+      if (dateFilter === 'neverPopManual' && toMillis(p.popularityManualUpdatedAt)) return false;
       return true;
     })
     .slice()
     .sort((a: any, b: any) => {
-      const aAuto = a.popularityAutoUpdatedAt?._seconds || 0;
-      const bAuto = b.popularityAutoUpdatedAt?._seconds || 0;
-      const aManual = a.popularityManualUpdatedAt?._seconds || 0;
-      const bManual = b.popularityManualUpdatedAt?._seconds || 0;
-      const aUpdated = a.updatedAt?._seconds || 0;
-      const bUpdated = b.updatedAt?._seconds || 0;
+      const aAuto = toMillis(a.popularityAutoUpdatedAt);
+      const bAuto = toMillis(b.popularityAutoUpdatedAt);
+      const aManual = toMillis(a.popularityManualUpdatedAt);
+      const bManual = toMillis(b.popularityManualUpdatedAt);
+      const aUpdated = toMillis(a.updatedAt);
+      const bUpdated = toMillis(b.updatedAt);
+      const aHours = toMillis(a.hoursUpdatedAt);
+      const bHours = toMillis(b.hoursUpdatedAt);
       const aRating = typeof a.rating === 'number' ? a.rating : -1;
       const bRating = typeof b.rating === 'number' ? b.rating : -1;
       const aReviews = typeof a.userRatingsTotal === 'number' ? a.userRatingsTotal : -1;
@@ -111,6 +119,8 @@ export default function Admin() {
         case 'manual_asc': return aManual - bManual;
         case 'auto_desc': return bAuto - aAuto;
         case 'auto_asc': return aAuto - bAuto;
+        case 'hours_desc': return bHours - aHours;
+        case 'hours_asc': return aHours - bHours;
         case 'rating_desc': return (bRating - aRating);
         case 'rating_asc': return (aRating - bRating);
         case 'reviews_desc': return (bReviews - aReviews);
@@ -710,6 +720,21 @@ export default function Admin() {
                     </SelectContent>
                   </Select>
                 </div>
+                {/* Filtro por datas (nunca atualizados) */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-300">Datas:</span>
+                  <Select value={dateFilter} onValueChange={(v) => { setPage(1); setDateFilter(v as any); }}>
+                    <SelectTrigger className="h-8 bg-slate-600 border-slate-500 text-white w-56">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-700 border-slate-600 text-white">
+                      <SelectItem value="all">Sem filtro</SelectItem>
+                      <SelectItem value="neverHours">Nunca atualizou horários</SelectItem>
+                      <SelectItem value="neverPopAuto">Nunca popularidade (auto)</SelectItem>
+                      <SelectItem value="neverPopManual">Nunca popularidade (manual)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 {/* Filtro de Cidade */}
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-300">Cidade:</span>
@@ -758,6 +783,8 @@ export default function Admin() {
                         <SelectItem value="manual_asc">Manual: mais antigo</SelectItem>
                         <SelectItem value="auto_desc">Auto: mais recente</SelectItem>
                         <SelectItem value="auto_asc">Auto: mais antigo</SelectItem>
+                      <SelectItem value="hours_desc">Horários: mais recente</SelectItem>
+                      <SelectItem value="hours_asc">Horários: mais antigo</SelectItem>
                       <SelectItem value="updated_desc">Atualizado: mais recente</SelectItem>
                       <SelectItem value="updated_asc">Atualizado: mais antigo</SelectItem>
                       <SelectItem value="rating_desc">Rating: maior</SelectItem>
