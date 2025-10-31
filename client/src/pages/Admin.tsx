@@ -374,6 +374,30 @@ export default function Admin() {
     onError: (err: any) => toast({ title: 'Erro na importação (linha)', description: err.message || String(err), variant: 'destructive' })
   });
 
+  // Atualizar horários/avaliações (por lugar)
+  const updateHoursMutation = useMutation({
+    mutationFn: async (docId: string) => {
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      const resp = await fetch(`${API_URL}/places/${docId}/update-hours`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
+      return data;
+    },
+    onSuccess: (data: any) => {
+      const u = data?.updated || {};
+      toast({ title: 'Horários/avaliações atualizados', description: `horários: ${u.openingHours ? 'ok' : '—'} • rating: ${u.rating ? 'ok' : '—'} • reviews: ${u.userRatingsTotal ? 'ok' : '—'}` });
+      refetchPlaces();
+    },
+    onError: (err: any) => toast({ title: 'Erro ao atualizar', description: err.message || String(err), variant: 'destructive' })
+  });
+
   // Função para atualizar um place individual
   const updatePlaceMutation = useMutation({
     mutationFn: async (placeId: string) => {
@@ -688,12 +712,21 @@ export default function Admin() {
                             <Button variant="secondary" size="sm" onClick={() => importOnePopularityMutation.mutate({ docId: p.id, apiKey: serpApiKey || undefined })}>
                               <Download className="h-4 w-4 mr-1" /> Buscar API (linha)
                             </Button>
+                            <Button variant="outline" size="sm" onClick={() => updateHoursMutation.mutate(p.id)} disabled={updateHoursMutation.isPending}>
+                              <Clock className="h-4 w-4 mr-1" /> Atualizar horários/avaliações
+                            </Button>
                             <Button variant="destructive" size="sm" onClick={() => deletePlaceMutation.mutate(p.id)}>
                               <Trash className="h-4 w-4 mr-1" /> Excluir
                             </Button>
                           </div>
                         </div>
                         <div className="mt-2 text-xs text-gray-400">rating: {p.rating ?? '—'} • reviews: {p.userRatingsTotal ?? 0}</div>
+                        {(!p.openingHours || !p.rating) && (
+                          <div className="mt-1 text-[11px]">
+                            {!p.openingHours && <span className="text-yellow-400 mr-2">• faltam horários</span>}
+                            {!p.rating && <span className="text-yellow-400">• falta avaliação</span>}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
