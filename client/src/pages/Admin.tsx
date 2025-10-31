@@ -846,6 +846,9 @@ export default function Admin() {
                             <Button variant="secondary" size="sm" onClick={() => importOnePopularityMutation.mutate({ docId: p.id, apiKey: serpApiKey || undefined })}>
                               <Download className="h-4 w-4 mr-1" /> Buscar API (linha)
                             </Button>
+                            <Button variant="outline" size="sm" onClick={() => window.open(`/admin/places-debug?docId=${p.id}`, '_blank') }>
+                              <Clock className="h-4 w-4 mr-1" /> Debug Preview
+                            </Button>
                             <Button variant="secondary" size="sm" onClick={() => importOneOutscraperMutation.mutate(p.id)} disabled={importOneOutscraperMutation.isPending}>
                               <Download className="h-4 w-4 mr-1" /> Buscar via Outscraper
                             </Button>

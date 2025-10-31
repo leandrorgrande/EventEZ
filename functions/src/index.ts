@@ -84,6 +84,97 @@ app.get('/places', async (req: express.Request, res: express.Response): Promise<
   }
 });
 
+// Preview (sem update): coleta dados dos provedores e retorna normalização para inspeção
+app.get('/places/:docId/popular-times/preview', authenticate, async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    const { docId } = req.params;
+    const ref = db.collection('places').doc(docId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ message: 'Place não encontrado' });
+      return;
+    }
+    const place = { id: docId, ...(snap.data() as any) } as any;
+    const latNum = typeof place.latitude === 'string' ? parseFloat(place.latitude) : (typeof place.latitude === 'number' ? place.latitude : null);
+    const lngNum = typeof place.longitude === 'string' ? parseFloat(place.longitude) : (typeof place.longitude === 'number' ? place.longitude : null);
+    const out: any = { place: { id: docId, name: place.name || place.displayName?.text || '', placeId: place.placeId || null, formattedAddress: place.formattedAddress || null } };
+    try {
+      const s = await fetchPopularTimesFromSerpApi(place.name || place.displayName?.text || '', place.formattedAddress, place.placeId || null, latNum, lngNum);
+      out.serpapi = s ? { popularTimes: s.popularTimes, openingHours: s.openingHours, isOpen: s.isOpen, price: s.price } : null;
+    } catch (e: any) { out.serpapi = { error: e?.message || String(e) }; }
+    try {
+      const o = await fetchPopularTimesFromOutscraper(place.name || place.displayName?.text || '', place.formattedAddress, place.placeId || null, place.googleMapsUri || null);
+      out.outscraper = o ? { popularTimes: o.popularTimes, openingHours: o.openingHours, isOpen: o.isOpen, price: o.price } : null;
+    } catch (e: any) { out.outscraper = { error: e?.message || String(e) }; }
+    try {
+      // usar mesma rotina inline de tasks usada no import (sem update)
+      const resultsTasks = await (async () => {
+        try {
+          const axios = require('axios');
+          const apiKey = process.env.OUTSCRAPER_API_KEY;
+          if (!apiKey) return null;
+          const headers = { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' } as any;
+          const base = 'https://api.outscraper.cloud';
+          const buildLocation = (addr?: string): string => {
+            const a = (addr || '').toLowerCase();
+            if (a.includes('santos')) return 'BR^>Sao Paulo^>Santos';
+            if (a.includes('são vicente') || a.includes('sao vicente')) return 'BR^>Sao Paulo^>Sao Vicente';
+            if (a.includes('guarujá') || a.includes('guaruja')) return 'BR^>Sao Paulo^>Guaruja';
+            if (a.includes('praia grande')) return 'BR^>Sao Paulo^>Praia Grande';
+            return 'BR';
+          };
+          const payload: any = {
+            service_name: 'google_maps_service_v2',
+            title: 'popular_times_preview',
+            language: 'en',
+            region: 'BR',
+            categories: [place.name || ''],
+            locations: [buildLocation(place.formattedAddress)],
+            limit: 1,
+            exactMatch: false,
+            enrich: false,
+            UISettings: { isCustomQueries: false, isCustomCategories: false, isCustomLocations: false },
+            settings: { output_columns: [], output_extension: 'json' },
+            tags: place.name || ''
+          };
+          const createRes = await axios.post(`${base}/tasks`, payload, { headers, timeout: 20000 });
+          const taskId = createRes?.data?.id || createRes?.data?.task_id || createRes?.data?.data?.id;
+          if (!taskId) return { createRes: createRes?.data };
+          const poll = async (): Promise<any> => {
+            const starts = Date.now();
+            while (Date.now() - starts < 60000) {
+              try { const g1 = await axios.get(`${base}/tasks/get`, { headers, params: { id: taskId }, timeout: 15000 }); const st = g1?.data?.status || g1?.data?.data?.status; if (st && String(st).toLowerCase() === 'finished') return g1?.data; } catch {}
+              try { const g2 = await axios.get(`${base}/tasks/get`, { headers, params: { task_id: taskId }, timeout: 15000 }); const st2 = g2?.data?.status || g2?.data?.data?.status; if (st2 && String(st2).toLowerCase() === 'finished') return g2?.data; } catch {}
+              await new Promise(r => setTimeout(r, 3000));
+            }
+            return { timeout: true };
+          };
+          const rs = await poll();
+          return rs;
+        } catch { return null; }
+      })();
+      // extrair item e normalizações
+      const findWithPopularTimes = (node: any): any | null => {
+        if (!node) return null;
+        if (Array.isArray(node)) { for (const el of node) { const f = findWithPopularTimes(el); if (f) return f; } return null; }
+        if (typeof node === 'object') {
+          if (node.popular_times && Array.isArray(node.popular_times)) return node;
+          for (const k of Object.keys(node)) { const f = findWithPopularTimes(node[k]); if (f) return f; }
+        }
+        return null;
+      };
+      const item = resultsTasks ? findWithPopularTimes(resultsTasks) : null;
+      const normalized = item ? normalizePopularTimes(item) : null;
+      const open = item ? (normalizeOpeningHoursGeneric(item) || normalizeOpeningHoursGeneric(item?.opening_hours) || null) : null;
+      out.outscraper_tasks = { raw: resultsTasks || null, item: item || null, popularTimes: normalized, openingHours: open };
+    } catch (e: any) { out.outscraper_tasks = { error: e?.message || String(e) }; }
+
+    res.json(out);
+  } catch (error: any) {
+    res.status(500).json({ message: error?.message || 'Falha no preview' });
+  }
+});
+
 // Inserir um novo lugar por nome + cidade via Outscraper Tasks
 app.post('/places/insert-from-outscraper', authenticate, async (req: express.Request, res: express.Response): Promise<void> => {
   try {
