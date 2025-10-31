@@ -1347,10 +1347,13 @@ const fetchPopularTimesFromOutscraper = async (
     const baseUrl = 'https://api.app.outscraper.com/maps/places-details';
     const params: any = {};
     const placeId = (placeIdRaw || '').startsWith('places/') ? (placeIdRaw as string).slice(7) : (placeIdRaw || '');
+    // Conforme docs: aceitar query OU place_id; forçar fields necessários e resposta síncrona
     if (placeId) params.place_id = placeId; else params.query = address ? `${name} ${address}` : name;
     params.language = 'pt-BR';
-    params.region = 'br';
-    params.fields = 'all';
+    params.region = 'BR';
+    params.limit = 1;
+    params.async = false;
+    params.fields = 'name,place_id,working_hours,opening_hours,popular_times,rating,reviews,subtypes,full_address,latitude,longitude';
     const resp = await axios.get(baseUrl, { headers, params, timeout: 25000 });
     const item = Array.isArray(resp?.data) ? resp.data[0] : (resp?.data?.data?.[0] || resp?.data || {});
     const normalized = normalizePopularTimes(item?.popular_times || item?.popularTimes || item);
@@ -1776,7 +1779,8 @@ app.post('/places/:docId/update-hours', authenticate, async (req: express.Reques
     const logs: string[] = [];
     if (openingHours) {
       updates.openingHours = openingHours;
-      logs.push('Horários de funcionamento atualizados');
+      const sample = openingHours.monday || openingHours.tuesday || openingHours.friday || null;
+      logs.push(`Horários de funcionamento atualizados${sample ? ` (ex: ${sample.closed ? 'fechado' : `${sample.open}–${sample.close}`})` : ''}`);
     }
     if (isOpenValue !== null) {
       updates.isOpen = isOpenValue;
@@ -1800,6 +1804,7 @@ app.post('/places/:docId/update-hours', authenticate, async (req: express.Reques
 
     res.json({
       success: true,
+      id: docId,
       updated: {
         openingHours: !!openingHours,
         rating: typeof newRating === 'number',
