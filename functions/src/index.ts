@@ -1009,9 +1009,14 @@ const normalizePopularTimes = (raw: any): any | null => {
     sunday: Array(24).fill(0)
   };
 
-  const mapDayName = (name: string): string | null => {
-    if (!name) return null;
-    const n = name.toLowerCase();
+  const mapDayName = (name: any): string | null => {
+    if (name === undefined || name === null) return null;
+    // Suporte a numérico (1..7) vindo do Outscraper: 1=Mon .. 7=Sun
+    if (typeof name === 'number') {
+      const mapNum: Record<number, string> = { 1: 'monday', 2: 'tuesday', 3: 'wednesday', 4: 'thursday', 5: 'friday', 6: 'saturday', 7: 'sunday' };
+      return mapNum[name] || null;
+    }
+    const n = String(name).toLowerCase();
     if (n.startsWith('mon')) return 'monday';
     if (n.startsWith('tue')) return 'tuesday';
     if (n.startsWith('wed')) return 'wednesday';
@@ -1117,9 +1122,9 @@ const normalizePopularTimes = (raw: any): any | null => {
   const arr = raw.popular_times || raw.populartimes || raw;
   if (Array.isArray(arr)) {
     arr.forEach((dayObj: any) => {
-      const key = mapDayName(dayObj?.name || dayObj?.day || dayObj?.weekday) as string;
+      const key = mapDayName(dayObj?.day_text || dayObj?.name || dayObj?.weekday || dayObj?.day) as string;
       if (!key || !dayKeys.includes(key)) return;
-      const data = dayObj?.data || dayObj?.hours || dayObj?.popularity || [];
+      const data = dayObj?.popular_times || dayObj?.data || dayObj?.hours || dayObj?.popularity || [];
       if (Array.isArray(data)) {
         data.forEach((entry: any, idx: number) => {
           if (typeof entry === 'number') { setHour(key, idx, entry); return; }
@@ -1797,11 +1802,7 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req: expres
         if (!popularTimes) popularTimes = taskRes.popularTimes;
         if (!openingHours) openingHours = taskRes.openingHours;
         log(`Outscraper tasks: popularTimes=${!!taskRes.popularTimes}, openingHours=${!!taskRes.openingHours}`);
-        if (!popularTimes && !openingHours) {
-          log('APIs não retornaram dados suficientes');
-          res.status(502).json({ message: 'APIs não retornaram dados suficientes', logs: logMessages });
-          return;
-        }
+        // Mesmo sem popularTimes/openingHours, podemos aproveitar campos ricos
         // Atualizar com campos ricos
         const updates: any = {
           ...(popularTimes ? { popularTimes } : {}),
@@ -1827,12 +1828,15 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req: expres
         if (f.googleMapsUri) updates.googleMapsUri = f.googleMapsUri;
         if (f.placeId && !place.placeId) updates.placeId = f.placeId;
         if (Array.isArray(f.types) && f.types.length) updates.types = f.types;
-        await ref.update(updates);
-        res.json({ success: true, id: docId, source: 'outscraper_tasks', logs: logMessages });
+        if (Object.keys(updates).length > 0) {
+          await ref.update(updates);
+        }
+        res.json({ success: true, id: docId, source: 'outscraper_tasks', logs: logMessages, updatedFields: Object.keys(updates) });
         return;
       } else {
-        log('APIs não retornaram dados suficientes');
-        res.status(502).json({ message: 'APIs não retornaram dados suficientes', logs: logMessages });
+        // Sem dados novos: não tratar como erro; apenas informar no-op
+        log('Sem dados novos das APIs (no-op). Mantido o que já existia.');
+        res.json({ success: true, id: docId, source: 'none', logs: logMessages, updatedFields: [] });
         return;
       }
     }
