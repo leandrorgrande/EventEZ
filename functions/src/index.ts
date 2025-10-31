@@ -9,6 +9,7 @@ admin.initializeApp();
 
 // Secret para SerpApi (injetado como variável de ambiente)
 const SERPAPI_API_KEY = defineSecret('SERPAPI_API_KEY');
+const OUTSCRAPER_API_KEY = defineSecret('OUTSCRAPER_API_KEY');
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -1276,6 +1277,93 @@ const normalizeOpeningHoursFromSerpApi = (detail: any): any | null => {
   }
 };
 
+// Normalizar horários de funcionamento de provedores alternativos (e.g., Outscraper)
+const normalizeOpeningHoursGeneric = (raw: any): any | null => {
+  try {
+    const hoursSource = raw?.working_hours || raw?.hours || raw?.opening_hours || null;
+    if (!hoursSource) return null;
+    const entries: Array<[string, string]> = Array.isArray(hoursSource)
+      ? hoursSource.map((o: any) => [Object.keys(o)[0], o[Object.keys(o)[0]]])
+      : Object.keys(hoursSource).map((k: string) => [k, hoursSource[k]] as [string, string]);
+    const result: any = { monday: null, tuesday: null, wednesday: null, thursday: null, friday: null, saturday: null, sunday: null };
+    const mapDay = (d: string): string | null => {
+      const s = (d || '').toLowerCase();
+      if (s.startsWith('mon')) return 'monday';
+      if (s.startsWith('tue')) return 'tuesday';
+      if (s.startsWith('wed')) return 'wednesday';
+      if (s.startsWith('thu')) return 'thursday';
+      if (s.startsWith('fri')) return 'friday';
+      if (s.startsWith('sat')) return 'saturday';
+      if (s.startsWith('sun')) return 'sunday';
+      if (s.startsWith('seg')) return 'monday';
+      if (s.startsWith('ter')) return 'tuesday';
+      if (s.startsWith('qua')) return 'wednesday';
+      if (s.startsWith('qui')) return 'thursday';
+      if (s.startsWith('sex')) return 'friday';
+      if (s.startsWith('sáb') || s.startsWith('sab')) return 'saturday';
+      if (s.startsWith('dom')) return 'sunday';
+      return null;
+    };
+    const to24 = (txt: string): string | null => {
+      if (!txt) return null;
+      const m = txt.trim().match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
+      if (!m) return null;
+      let h = parseInt(m[1], 10);
+      const min = m[2] ? parseInt(m[2], 10) : 0;
+      const ap = (m[3] || '').toUpperCase();
+      if (ap === 'PM' && h !== 12) h += 12;
+      if (ap === 'AM' && h === 12) h = 0;
+      return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+    };
+    for (const [dayKey, value] of entries) {
+      const normDay = mapDay(dayKey);
+      if (!normDay) continue;
+      const txt = String(value || '').trim();
+      if (!txt || /fechad|closed/i.test(txt)) { result[normDay] = { open: null, close: null, closed: true }; continue; }
+      const m = txt.match(/([\d: ]+(?:AM|PM)?)\s*[–-]\s*([\d: ]+(?:AM|PM)?)/i);
+      if (m) {
+        const open = to24(m[1]);
+        const close = to24(m[2]);
+        result[normDay] = { open, close, closed: false };
+      }
+    }
+    return result;
+  } catch {
+    return null;
+  }
+};
+
+// Provedor alternativo: Outscraper
+const fetchPopularTimesFromOutscraper = async (
+  name: string,
+  address?: string,
+  placeIdRaw?: string | null,
+): Promise<{ popularTimes: any | null; openingHours: any | null; isOpen: boolean | null; price?: string | null } | null> => {
+  try {
+    const axios = require('axios');
+    const apiKey = process.env.OUTSCRAPER_API_KEY;
+    if (!apiKey) return null;
+    const headers = { 'X-API-KEY': apiKey } as any;
+    const baseUrl = 'https://api.app.outscraper.com/maps/places-details';
+    const params: any = {};
+    const placeId = (placeIdRaw || '').startsWith('places/') ? (placeIdRaw as string).slice(7) : (placeIdRaw || '');
+    if (placeId) params.place_id = placeId; else params.query = address ? `${name} ${address}` : name;
+    params.language = 'pt-BR';
+    params.region = 'br';
+    params.fields = 'all';
+    const resp = await axios.get(baseUrl, { headers, params, timeout: 25000 });
+    const item = Array.isArray(resp?.data) ? resp.data[0] : (resp?.data?.data?.[0] || resp?.data || {});
+    const normalized = normalizePopularTimes(item?.popular_times || item?.popularTimes || item);
+    const openingHours = normalizeOpeningHoursGeneric(item) || normalizeOpeningHoursGeneric(item?.opening_hours) || null;
+    // isOpen nem sempre vem; deixar null se não houver
+    const isOpen = typeof item?.opening_hours?.open_now === 'boolean' ? !!item?.opening_hours?.open_now : null;
+    const price = item?.price_level || item?.price || null;
+    return { popularTimes: normalized, openingHours, isOpen, price };
+  } catch (e: any) {
+    console.warn('[Outscraper] erro:', e?.response?.status, e?.response?.data || e?.message || e);
+    return null;
+  }
+};
 const fetchPopularTimesFromSerpApi = async (
   name: string,
   address?: string,
@@ -1342,12 +1430,43 @@ const fetchPopularTimesFromSerpApi = async (
         }
       }
     }
-    const normalized = normalizePopularTimes(detail || firstLocal);
-    const openingHours = normalizeOpeningHoursFromSerpApi(detail) || normalizeOpeningHoursFromSerpApi(detail?.place_results);
-    const isOpen = typeof detail?.opening_hours?.open_now === 'boolean'
+    let normalized = normalizePopularTimes(detail || firstLocal);
+    let openingHours = normalizeOpeningHoursFromSerpApi(detail) || normalizeOpeningHoursFromSerpApi(detail?.place_results);
+    let isOpen = typeof detail?.opening_hours?.open_now === 'boolean'
       ? !!detail?.opening_hours?.open_now
       : (typeof detail?.place_results?.opening_hours?.open_now === 'boolean' ? !!detail?.place_results?.opening_hours?.open_now : null);
-    const price = (detail?.place_results?.price ?? firstLocal?.price) || null;
+    let price = (detail?.place_results?.price ?? firstLocal?.price) || null;
+
+    // Fallback: tentar novamente com hl='en' se popularTimes/horários não vierem
+    if (!normalized || !openingHours) {
+      try {
+        const retryParams: any = { hl: 'en', gl: 'br', api_key: apiKey };
+        const dataId2 = firstLocal?.data_id;
+        if (dataId2) {
+          const dLat = (typeof lat === 'number') ? lat : (firstLocal?.gps_coordinates?.latitude ?? undefined);
+          const dLng = (typeof lng === 'number') ? lng : (firstLocal?.gps_coordinates?.longitude ?? undefined);
+          const dataParam = (typeof dLat === 'number' && typeof dLng === 'number')
+            ? `!4m5!3m4!1s${dataId2}!8m2!3d${dLat}!4d${dLng}`
+            : `!4m5!3m4!1s${dataId2}!8m2`;
+          retryParams.engine = 'google_maps';
+          retryParams.type = 'place';
+          retryParams.data = dataParam;
+          if (typeof dLat === 'number' && typeof dLng === 'number') retryParams.ll = `@${dLat},${dLng},14z`;
+          const retryRes = await axios.get('https://serpapi.com/search.json', { params: retryParams, timeout: 20000 });
+          const d2 = retryRes?.data;
+          const n2 = normalizePopularTimes(d2 || d2?.place_results || {});
+          const o2 = normalizeOpeningHoursFromSerpApi(d2) || normalizeOpeningHoursFromSerpApi(d2?.place_results);
+          if (!normalized && n2) normalized = n2;
+          if (!openingHours && o2) openingHours = o2;
+          if (!price) price = d2?.place_results?.price || price;
+          if (isOpen === null) {
+            if (typeof d2?.opening_hours?.open_now === 'boolean') isOpen = !!d2?.opening_hours?.open_now;
+            else if (typeof d2?.place_results?.opening_hours?.open_now === 'boolean') isOpen = !!d2?.place_results?.opening_hours?.open_now;
+          }
+        }
+      } catch {}
+    }
+
     return { popularTimes: normalized, openingHours, isOpen, price };
   } catch (e: any) {
     console.error('[Import] SerpApi error:', e?.response?.status, e?.response?.data || e?.message || e);
@@ -1434,6 +1553,20 @@ app.post('/places/popular-times/import-once', authenticate, async (req: express.
         } else {
           log('SerpApi não retornou dados (fromSerp=null).');
         }
+        // Fallback: Outscraper, se SerpApi falhar
+        if (!popularTimes || !openingHours) {
+          const fromOut = await fetchPopularTimesFromOutscraper(
+            place.name || place.displayName?.text || '',
+            place.formattedAddress,
+            place.placeId || null,
+          );
+          if (fromOut) {
+            if (!popularTimes) popularTimes = fromOut.popularTimes;
+            if (!openingHours) openingHours = fromOut.openingHours;
+            if (isOpen === null) isOpen = fromOut.isOpen ?? null;
+            log(`Outscraper retornou popularTimes=${!!fromOut.popularTimes}, openingHours=${!!fromOut.openingHours}`);
+          }
+        }
         if (!popularTimes && place.googleMapsUri) {
           popularTimes = await scrapePopularTimes(place.name || place.displayName?.text || '', place.googleMapsUri);
           log(`Fallback scraping: popularTimes=${!!popularTimes}`);
@@ -1476,6 +1609,7 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req: expres
   try {
     const { docId } = req.params;
     const overrideApiKey: string | undefined = (req.body as any)?.apiKey;
+    const providerPref: string | undefined = (req.query as any)?.provider || (req.body as any)?.provider;
     const logMessages: string[] = [];
     const log = (m: string) => { console.log('[Import-One]', m); logMessages.push(m); };
 
@@ -1492,43 +1626,76 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req: expres
 
     const latNum = typeof place.latitude === 'string' ? parseFloat(place.latitude) : (typeof place.latitude === 'number' ? place.latitude : null);
     const lngNum = typeof place.longitude === 'string' ? parseFloat(place.longitude) : (typeof place.longitude === 'number' ? place.longitude : null);
-    const fromSerp = await fetchPopularTimesFromSerpApi(
-      place.name || place.displayName?.text || '',
-      place.formattedAddress,
-      place.placeId || null,
-      latNum,
-      lngNum,
-    );
     let popularTimes: any | null = null;
     let openingHours: any | null = null;
     let isOpen: boolean | null = null;
-    if (fromSerp) {
-      popularTimes = fromSerp.popularTimes;
-      openingHours = fromSerp.openingHours;
-      isOpen = fromSerp.isOpen;
-      log(`SerpApi: popularTimes=${!!popularTimes}, openingHours=${!!openingHours}, isOpen=${isOpen}`);
+    let providerUsed: 'serpapi' | 'outscraper' | null = null;
+    let priceVal: string | null = null;
+    if (providerPref === 'outscraper') {
+      const fromOut = await fetchPopularTimesFromOutscraper(
+        place.name || place.displayName?.text || '',
+        place.formattedAddress,
+        place.placeId || null,
+      );
+      if (fromOut) {
+        popularTimes = fromOut.popularTimes;
+        openingHours = fromOut.openingHours;
+        isOpen = fromOut.isOpen ?? null;
+        priceVal = fromOut.price ?? null;
+        providerUsed = 'outscraper';
+        log(`Outscraper (forçado): popularTimes=${!!fromOut.popularTimes}, openingHours=${!!fromOut.openingHours}`);
+      }
+    } else {
+      const fromSerp = await fetchPopularTimesFromSerpApi(
+        place.name || place.displayName?.text || '',
+        place.formattedAddress,
+        place.placeId || null,
+        latNum,
+        lngNum,
+      );
+      if (fromSerp) {
+        popularTimes = fromSerp.popularTimes;
+        openingHours = fromSerp.openingHours;
+        isOpen = fromSerp.isOpen;
+        priceVal = fromSerp.price ?? null;
+        providerUsed = 'serpapi';
+        log(`SerpApi: popularTimes=${!!popularTimes}, openingHours=${!!openingHours}, isOpen=${isOpen}`);
+      }
+      if (!popularTimes || !openingHours) {
+        const fromOut = await fetchPopularTimesFromOutscraper(
+          place.name || place.displayName?.text || '',
+          place.formattedAddress,
+          place.placeId || null,
+        );
+        if (fromOut) {
+          if (!popularTimes) popularTimes = fromOut.popularTimes;
+          if (!openingHours) openingHours = fromOut.openingHours;
+          if (isOpen === null) isOpen = fromOut.isOpen ?? null;
+          if (!priceVal && fromOut.price) priceVal = fromOut.price;
+          if (!providerUsed) providerUsed = 'outscraper';
+          log(`Outscraper (fallback): popularTimes=${!!fromOut.popularTimes}, openingHours=${!!fromOut.openingHours}`);
+        }
+      }
     }
-    // Somente considerar SUCESSO se vierem popularTimes E openingHours do SerpApi
-    const success = !!(fromSerp && (fromSerp.popularTimes || fromSerp.openingHours));
+    const success = !!(popularTimes || openingHours);
     if (!success) {
-      log('API não retornou dados suficientes');
-      res.status(502).json({ message: 'API não retornou dados suficientes', logs: logMessages });
+      log('APIs não retornaram dados suficientes');
+      res.status(502).json({ message: 'APIs não retornaram dados suficientes', logs: logMessages });
       return;
     }
 
     await ref.update({
-      ...(fromSerp!.popularTimes ? { popularTimes: fromSerp!.popularTimes } : {}),
-      ...(fromSerp!.openingHours ? { openingHours: fromSerp!.openingHours } : {}),
+      ...(popularTimes ? { popularTimes } : {}),
+      ...(openingHours ? { openingHours } : {}),
       ...(isOpen !== null ? { isOpen } : {}),
-      ...(fromSerp?.price ? { price: fromSerp.price } : {}),
-      dataSource: 'serpapi',
-      popularityProvider: 'serpapi',
+      ...(priceVal ? { price: priceVal } : {}),
+      ...(providerUsed ? { dataSource: providerUsed, popularityProvider: providerUsed } : {}),
       popularityUpdatedBy: 'manual',
       popularityManualUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    res.json({ success: true, id: docId, source: 'serpapi', logs: logMessages });
+    res.json({ success: true, id: docId, source: providerUsed || 'unknown', logs: logMessages });
   } catch (error: any) {
     console.error('[Import-One] erro:', error);
     res.status(500).json({ message: error?.message || 'Falha na importação manual' });
@@ -1557,7 +1724,8 @@ app.post('/places/:docId/update-hours', authenticate, async (req: express.Reques
 
     const apiKey = "AIzaSyAv1QPfxhhYJ-a7czQhXPILtUI3Qz16UAg";
     const fieldMask = 'regularOpeningHours,currentOpeningHours,displayName,rating,userRatingCount';
-    const detailsUrl = `https://places.googleapis.com/v1/places/${place.placeId}`;
+    const resourceName = String(place.placeId || '').startsWith('places/') ? String(place.placeId) : `places/${place.placeId}`;
+    const detailsUrl = `https://places.googleapis.com/v1/${resourceName}`;
     const detailsResponse = await fetch(detailsUrl, {
       method: 'GET',
       headers: {
@@ -1601,15 +1769,32 @@ app.post('/places/:docId/update-hours', authenticate, async (req: express.Reques
 
     const openingHours = extractOpeningHoursLocal(details.regularOpeningHours);
     const isOpenValue = details.currentOpeningHours ? (details.currentOpeningHours.openNow || null) : null;
-    const rating = typeof details.rating === 'number' ? details.rating : (place.rating ?? null);
-    const userRatingCount = typeof details.userRatingCount === 'number' ? details.userRatingCount : (place.userRatingsTotal ?? 0);
+    const newRating = typeof details.rating === 'number' ? details.rating : (place.rating ?? null);
+    const newUserRatingCount = typeof details.userRatingCount === 'number' ? details.userRatingCount : (place.userRatingsTotal ?? 0);
 
     const updates: any = { updatedAt: admin.firestore.FieldValue.serverTimestamp() };
-    if (openingHours) updates.openingHours = openingHours;
-    if (isOpenValue !== null) updates.isOpen = isOpenValue;
-    if (rating !== null && rating !== undefined) updates.rating = rating;
-    if (typeof userRatingCount === 'number') updates.userRatingsTotal = userRatingCount;
-    if (details.displayName?.text) updates.name = details.displayName.text;
+    const logs: string[] = [];
+    if (openingHours) {
+      updates.openingHours = openingHours;
+      logs.push('Horários de funcionamento atualizados');
+    }
+    if (isOpenValue !== null) {
+      updates.isOpen = isOpenValue;
+      logs.push(`Status atual: ${isOpenValue ? 'aberto' : 'fechado'}`);
+    }
+    if (newRating !== null && newRating !== undefined) {
+      const prev = place.rating ?? '—';
+      updates.rating = newRating;
+      logs.push(`Rating: ${prev} → ${newRating}`);
+    }
+    if (typeof newUserRatingCount === 'number') {
+      const prev = typeof place.userRatingsTotal === 'number' ? place.userRatingsTotal : 0;
+      updates.userRatingsTotal = newUserRatingCount;
+      logs.push(`Qtd avaliações: ${prev} → ${newUserRatingCount}`);
+    }
+    if (details.displayName?.text) {
+      updates.name = details.displayName.text;
+    }
 
     await ref.update(updates);
 
@@ -1617,9 +1802,10 @@ app.post('/places/:docId/update-hours', authenticate, async (req: express.Reques
       success: true,
       updated: {
         openingHours: !!openingHours,
-        rating: typeof rating === 'number',
-        userRatingsTotal: typeof userRatingCount === 'number'
-      }
+        rating: typeof newRating === 'number',
+        userRatingsTotal: typeof newUserRatingCount === 'number'
+      },
+      logs
     });
   } catch (error: any) {
     console.error('[Update-One-Hours] erro:', error);
@@ -1711,7 +1897,8 @@ app.post('/places/update-all-hours', authenticate, async (req: express.Request, 
         console.log(`[API] Atualizando: ${place.name} (${place.placeId})`);
         
         // Buscar detalhes do lugar na Google Places API
-        const placeDetailsUrl = `https://places.googleapis.com/v1/places/${place.placeId}`;
+        const resourceName = String(place.placeId || '').startsWith('places/') ? String(place.placeId) : `places/${place.placeId}`;
+        const placeDetailsUrl = `https://places.googleapis.com/v1/${resourceName}`;
         
         const detailsResponse = await fetch(placeDetailsUrl, {
           method: 'GET',
@@ -1817,7 +2004,8 @@ app.post('/places/update-all-hours-stream', authenticate, async (req: express.Re
           continue;
         }
 
-        const detailsUrl = `https://places.googleapis.com/v1/places/${placeId}`;
+        const resourceName = String(placeId || '').startsWith('places/') ? String(placeId) : `places/${placeId}`;
+        const detailsUrl = `https://places.googleapis.com/v1/${resourceName}`;
         const detailsResponse = await fetch(detailsUrl, {
           method: 'GET',
           headers: {
@@ -2168,4 +2356,4 @@ app.post('/places/scrape-popular-times', authenticate, async (req: express.Reque
 });
 
 // Export all functions
-export const api = onRequest({ region: 'us-central1', secrets: [SERPAPI_API_KEY] }, app);
+export const api = onRequest({ region: 'us-central1', secrets: [SERPAPI_API_KEY, OUTSCRAPER_API_KEY] }, app);
