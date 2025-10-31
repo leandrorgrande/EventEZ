@@ -1802,11 +1802,7 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req, res) =
                 if (!openingHours)
                     openingHours = taskRes.openingHours;
                 log(`Outscraper tasks: popularTimes=${!!taskRes.popularTimes}, openingHours=${!!taskRes.openingHours}`);
-                if (!popularTimes && !openingHours) {
-                    log('APIs não retornaram dados suficientes');
-                    res.status(502).json({ message: 'APIs não retornaram dados suficientes', logs: logMessages });
-                    return;
-                }
+                // Mesmo sem popularTimes/openingHours, podemos aproveitar campos ricos
                 // Atualizar com campos ricos
                 const updates = {
                     ...(popularTimes ? { popularTimes } : {}),
@@ -1845,13 +1841,16 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req, res) =
                     updates.placeId = f.placeId;
                 if (Array.isArray(f.types) && f.types.length)
                     updates.types = f.types;
-                await ref.update(updates);
-                res.json({ success: true, id: docId, source: 'outscraper_tasks', logs: logMessages });
+                if (Object.keys(updates).length > 0) {
+                    await ref.update(updates);
+                }
+                res.json({ success: true, id: docId, source: 'outscraper_tasks', logs: logMessages, updatedFields: Object.keys(updates) });
                 return;
             }
             else {
-                log('APIs não retornaram dados suficientes');
-                res.status(502).json({ message: 'APIs não retornaram dados suficientes', logs: logMessages });
+                // Sem dados novos: não tratar como erro; apenas informar no-op
+                log('Sem dados novos das APIs (no-op). Mantido o que já existia.');
+                res.json({ success: true, id: docId, source: 'none', logs: logMessages, updatedFields: [] });
                 return;
             }
         }

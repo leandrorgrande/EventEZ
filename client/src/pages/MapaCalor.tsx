@@ -1304,12 +1304,18 @@ export default function MapaCalor() {
                             🎫 {ev.title || 'Evento'}
                           </h3>
                           
-                          {/* Data/horário */}
-                          <div className="flex items-center gap-1 mt-1">
+                          {/* Datas de início e fim */}
+                          <div className="flex flex-col gap-0.5 mt-1">
                             {ev.startDateTime && (
                               <span className="text-xs md:text-sm text-gray-300">
-                                📅 {new Date(ev.startDateTime).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                                Início: {new Date(ev.startDateTime).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                                 {ev.startDateTime.includes('T') && ` ${new Date(ev.startDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
+                              </span>
+                            )}
+                            {ev.endDateTime && (
+                              <span className="text-xs md:text-sm text-gray-300">
+                                Fim: {new Date(ev.endDateTime).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                                {ev.endDateTime.includes('T') && ` ${new Date(ev.endDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
                               </span>
                             )}
                           </div>
