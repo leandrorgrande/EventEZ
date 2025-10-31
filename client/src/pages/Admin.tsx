@@ -189,6 +189,10 @@ export default function Admin() {
   const [isUpdatingAll, setIsUpdatingAll] = useState(false);
   // Chave SerpApi (usada apenas na importação por item)
   const [serpApiKey, setSerpApiKey] = useState<string>("");
+  // Inserção por nome + cidade
+  const [newPlaceName, setNewPlaceName] = useState<string>("");
+  const [newPlaceCity, setNewPlaceCity] = useState<string>("");
+  const [newPlaceAddress, setNewPlaceAddress] = useState<string>("");
 
   // Queries (enabled only if admin to prevent unnecessary calls)
   const { data: allUsers = [] } = useQuery({
@@ -407,6 +411,31 @@ export default function Admin() {
       refetchPlaces();
     },
     onError: (err: any) => toast({ title: 'Erro na importação (linha)', description: err.message || String(err), variant: 'destructive' })
+  });
+
+  // Inserir um novo lugar por nome + cidade (Outscraper Tasks)
+  const insertPlaceMutation = useMutation({
+    mutationFn: async ({ name, city, address }: { name: string; city: string; address?: string }) => {
+      const API_URL = 'https://us-central1-eventu-1b077.cloudfunctions.net/api';
+      const token = await (await import('@/lib/firebase')).auth.currentUser?.getIdToken();
+      const resp = await fetch(`${API_URL}/places/insert-from-outscraper`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ name, city, address })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
+      return data;
+    },
+    onSuccess: (data: any) => {
+      toast({ title: 'Lugar inserido', description: `${data?.action || 'ok'} • ID ${data?.id || ''}` });
+      setNewPlaceName(""); setNewPlaceCity(""); setNewPlaceAddress("");
+      refetchPlaces();
+    },
+    onError: (err: any) => toast({ title: 'Erro ao inserir lugar', description: err.message || String(err), variant: 'destructive' })
   });
 
   // Atualizar horários/avaliações (por lugar)
@@ -640,6 +669,35 @@ export default function Admin() {
                       <SelectItem value="complete">Completos (ambos)</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                {/* Inserir novo lugar por nome + cidade */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Input
+                    placeholder="Nome do lugar"
+                    className="h-8 w-44 bg-slate-600 border-slate-500 text-white placeholder:text-slate-300"
+                    value={newPlaceName}
+                    onChange={(e) => setNewPlaceName(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Cidade (ex.: Santos)"
+                    className="h-8 w-44 bg-slate-600 border-slate-500 text-white placeholder:text-slate-300"
+                    value={newPlaceCity}
+                    onChange={(e) => setNewPlaceCity(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Endereço (opcional)"
+                    className="h-8 w-56 bg-slate-600 border-slate-500 text-white placeholder:text-slate-300"
+                    value={newPlaceAddress}
+                    onChange={(e) => setNewPlaceAddress(e.target.value)}
+                  />
+                  <Button
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-700"
+                    disabled={!newPlaceName || !newPlaceCity || insertPlaceMutation.isPending}
+                    onClick={() => insertPlaceMutation.mutate({ name: newPlaceName.trim(), city: newPlaceCity.trim(), address: newPlaceAddress.trim() || undefined })}
+                  >
+                    {insertPlaceMutation.isPending ? <><Clock className="h-4 w-4 mr-1 animate-spin"/> Inserindo...</> : <><Download className="h-4 w-4 mr-1"/> Inserir</>}
+                  </Button>
                 </div>
                 {/* Filtro por datas (nunca atualizados) */}
                 <div className="flex items-center gap-2">
