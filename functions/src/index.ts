@@ -142,7 +142,7 @@ app.get('/places/:docId/popular-times/preview', authenticate, async (req: expres
           if (!taskId) return { createRes: createRes?.data };
           const poll = async (): Promise<any> => {
             const starts = Date.now();
-            while (Date.now() - starts < 180000) {
+            while (Date.now() - starts < 480000) {
               try { const g1 = await axios.get(`${base}/tasks/get`, { headers, params: { id: taskId }, timeout: 15000 }); const st = g1?.data?.status || g1?.data?.data?.status; if (st && String(st).toLowerCase() === 'finished') return g1?.data; } catch {}
               try { const g2 = await axios.get(`${base}/tasks/get`, { headers, params: { task_id: taskId }, timeout: 15000 }); const st2 = g2?.data?.status || g2?.data?.data?.status; if (st2 && String(st2).toLowerCase() === 'finished') return g2?.data; } catch {}
               try { const r = await axios.get(`${base}/requests/${taskId}`, { headers, timeout: 15000 }); if (r?.data?.status && String(r.data.status).toLowerCase() === 'success') return r.data; } catch {}
@@ -2039,7 +2039,7 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req: expres
           if (!taskId) return null;
           const poll = async (): Promise<any> => {
             const starts = Date.now();
-            while (Date.now() - starts < 180000) {
+            while (Date.now() - starts < 480000) {
               try {
                 const g1 = await axios.get(`${base}/tasks/get`, { headers, params: { id: taskId }, timeout: 15000 });
                 const st = g1?.data?.status || g1?.data?.data?.status;
