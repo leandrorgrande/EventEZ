@@ -14,6 +14,7 @@ import Profile from "@/pages/Profile";
 import Admin from "@/pages/Admin";
 import SantosPlaces from "@/pages/SantosPlaces";
 import AdminPopularTimes from "@/pages/AdminPopularTimes";
+import PlacesDebug from "@/pages/PlacesDebug";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -32,6 +33,7 @@ function Router() {
         
                 <Route path="/admin" component={Admin} />
                 <Route path="/admin/popular-times" component={AdminPopularTimes} />
+                <Route path="/admin/places-debug" component={PlacesDebug} />
             </>
       )}
       <Route component={NotFound} />
