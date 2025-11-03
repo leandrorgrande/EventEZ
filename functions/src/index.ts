@@ -1181,40 +1181,86 @@ const scrapePopularTimes = async (placeName: string, googleMapsUri: string): Pro
 app.put('/places/:placeId/popular-times', async (req: express.Request, res: express.Response): Promise<void> => {
   try {
     const { placeId } = req.params;
-    const { popularTimes, dataSource = 'manual' } = req.body;
-    
+    const { popularTimes, dataSource = 'manual' } = req.body || {};
+
     console.log('[API] Atualizando popular times para:', placeId);
-    
-    // Buscar lugar no Firestore
-    const placesQuery = await db.collection('places')
-      .where('id', '==', placeId)
-      .limit(1)
-      .get();
-    
-    if (placesQuery.empty) {
-      res.status(404).json({ message: "Place not found" });
+
+    // Sanitiza o payload para o formato aceito no Firestore:
+    // popularTimes: { monday..sunday: number[24] }, 0..100
+    const dayKeys = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+    const sanitized: any = {
+      monday: Array(24).fill(0),
+      tuesday: Array(24).fill(0),
+      wednesday: Array(24).fill(0),
+      thursday: Array(24).fill(0),
+      friday: Array(24).fill(0),
+      saturday: Array(24).fill(0),
+      sunday: Array(24).fill(0)
+    };
+    if (popularTimes && typeof popularTimes === 'object') {
+      for (const k of dayKeys) {
+        const arr = Array.isArray(popularTimes[k]) ? popularTimes[k] : [];
+        for (let i = 0; i < 24; i++) {
+          const raw = arr[i] ?? 0;
+          const n = Math.max(0, Math.min(100, Math.floor(Number(raw) || 0)));
+          sanitized[k][i] = n;
+        }
+      }
+    }
+
+    // Encontrar o documento de forma robusta:
+    // 1) Tenta por ID do documento
+    let docRef = db.collection('places').doc(placeId);
+    let docSnap = await docRef.get();
+
+    // 2) Fallback: procurar por campo placeId (Google Place ID)
+    if (!docSnap.exists) {
+      const qByPlaceId = await db.collection('places')
+        .where('placeId', '==', placeId)
+        .limit(1)
+        .get();
+      if (!qByPlaceId.empty) {
+        docRef = qByPlaceId.docs[0].ref;
+        docSnap = qByPlaceId.docs[0];
+      }
+    }
+
+    // 3) Fallback extra (legado): campo 'id'
+    if (!docSnap.exists) {
+      const qByIdField = await db.collection('places')
+        .where('id', '==', placeId)
+        .limit(1)
+        .get();
+      if (!qByIdField.empty) {
+        docRef = qByIdField.docs[0].ref;
+        docSnap = qByIdField.docs[0];
+      }
+    }
+
+    if (!docSnap.exists) {
+      res.status(404).json({ message: 'Place not found' });
       return;
     }
-    
-    const placeDoc = placesQuery.docs[0];
-    
-    // Atualizar
-    await placeDoc.ref.update({
-      popularTimes,
+
+    // Atualiza com metadados que o front usa para exibição
+    await docRef.update({
+      popularTimes: sanitized,
       dataSource,
-      lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      popularityProvider: 'manual',
+      popularityManualUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
-    
+
     console.log('[API] Popular times atualizado com sucesso');
-    
-    res.json({ 
-      message: "Popular times updated successfully",
+
+    res.json({
+      message: 'Popular times updated successfully',
       placeId,
-      dataSource
+      updatedFields: ['popularTimes','dataSource','popularityProvider','popularityManualUpdatedAt','updatedAt']
     });
   } catch (error: any) {
     console.error('[API] Erro ao atualizar popular times:', error);
-    res.status(500).json({ message: "Failed to update popular times" });
+    res.status(500).json({ message: 'Failed to update popular times' });
   }
 });
 
