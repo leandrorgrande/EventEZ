@@ -382,8 +382,12 @@ export default function Admin() {
       if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
       return data;
     },
-    onSuccess: (data: any) => {
-      toast({ title: 'Importação (linha) concluída', description: data?.source ? `Fonte: ${data.source}` : 'OK' });
+    onSuccess: (data: any, vars: { docId: string; apiKey?: string }) => {
+      const updated = Array.isArray(data?.updatedFields) ? data.updatedFields.join(', ') : '';
+      toast({ title: 'Importação (linha) concluída', description: data?.source ? `Fonte: ${data.source}${updated ? ` • Campos: ${updated}` : ''}` : 'OK' });
+      if (Array.isArray(data?.logs)) {
+        setUpdatePlaceLogs(prev => ({ ...prev, [vars.docId]: data.logs }));
+      }
       refetchPlaces();
     },
     onError: (err: any) => toast({ title: 'Erro na importação (linha)', description: err.message || String(err), variant: 'destructive' })
@@ -406,8 +410,12 @@ export default function Admin() {
       if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
       return data;
     },
-    onSuccess: (data: any) => {
-      toast({ title: 'Importação (linha) concluída', description: data?.source ? `Fonte: ${data.source}` : 'OK' });
+    onSuccess: (data: any, docId: string) => {
+      const updated = Array.isArray(data?.updatedFields) ? data.updatedFields.join(', ') : '';
+      toast({ title: 'Importação (linha) concluída', description: data?.source ? `Fonte: ${data.source}${updated ? ` • Campos: ${updated}` : ''}` : 'OK' });
+      if (Array.isArray(data?.logs)) {
+        setUpdatePlaceLogs(prev => ({ ...prev, [docId]: data.logs }));
+      }
       refetchPlaces();
     },
     onError: (err: any) => toast({ title: 'Erro na importação (linha)', description: err.message || String(err), variant: 'destructive' })
