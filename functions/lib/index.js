@@ -175,7 +175,7 @@ app.get('/places/:docId/popular-times/preview', authenticate, async (req, res) =
                         return { createRes: createRes?.data };
                     const poll = async () => {
                         const starts = Date.now();
-                        while (Date.now() - starts < 60000) {
+                        while (Date.now() - starts < 180000) {
                             try {
                                 const g1 = await axios.get(`${base}/tasks/get`, { headers, params: { id: taskId }, timeout: 15000 });
                                 const st = g1?.data?.status || g1?.data?.data?.status;
@@ -190,12 +190,18 @@ app.get('/places/:docId/popular-times/preview', authenticate, async (req, res) =
                                     return g2?.data;
                             }
                             catch { }
+                            try {
+                                const r = await axios.get(`${base}/requests/${taskId}`, { headers, timeout: 15000 });
+                                if (r?.data?.status && String(r.data.status).toLowerCase() === 'success')
+                                    return r.data;
+                            }
+                            catch { }
                             await new Promise(r => setTimeout(r, 3000));
                         }
-                        return { timeout: true };
+                        return { timeout: true, taskId };
                     };
                     const rs = await poll();
-                    return rs;
+                    return { taskId, ...rs };
                 }
                 catch {
                     return null;
@@ -1322,6 +1328,17 @@ const normalizePopularTimes = (raw) => {
                 h = 0;
             return Math.max(0, Math.min(23, h));
         }
+        // Shorthand "9p" / "12a"
+        m = s.match(/^(\d{1,2})\s*([ap])$/i);
+        if (m) {
+            let h = parseInt(m[1], 10);
+            const ap = (m[2] || '').toLowerCase();
+            if (ap === 'p' && h !== 12)
+                h += 12;
+            if (ap === 'a' && h === 12)
+                h = 0;
+            return Math.max(0, Math.min(23, h));
+        }
         return fallbackIndex;
     };
     // setHour já definido acima
@@ -2080,7 +2097,7 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req, res) =
                         return null;
                     const poll = async () => {
                         const starts = Date.now();
-                        while (Date.now() - starts < 60000) {
+                        while (Date.now() - starts < 180000) {
                             try {
                                 const g1 = await axios.get(`${base}/tasks/get`, { headers, params: { id: taskId }, timeout: 15000 });
                                 const st = g1?.data?.status || g1?.data?.data?.status;
@@ -2093,6 +2110,12 @@ app.post('/places/:docId/popular-times/import', authenticate, async (req, res) =
                                 const st2 = g2?.data?.status || g2?.data?.data?.status;
                                 if (st2 && String(st2).toLowerCase() === 'finished')
                                     return g2?.data?.results || g2?.data?.data || g2?.data;
+                            }
+                            catch { }
+                            try {
+                                const r = await axios.get(`${base}/requests/${taskId}`, { headers, timeout: 15000 });
+                                if (r?.data?.status && String(r.data.status).toLowerCase() === 'success')
+                                    return r.data;
                             }
                             catch { }
                             await new Promise(r => setTimeout(r, 3000));
