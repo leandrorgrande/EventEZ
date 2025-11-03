@@ -58,6 +58,12 @@ export default function PlacesDebug() {
           </div>
           <div className="bg-slate-800 rounded border border-slate-700 p-3 overflow-auto md:col-span-2">
             <h2 className="font-semibold mb-2">Outscraper Tasks (raw + normalizado)</h2>
+            {result?.outscraper_tasks?.taskId && (
+              <div className="text-xs text-blue-300 mb-2">
+                TaskId: {result.outscraper_tasks.taskId} — 
+                <a className="underline ml-1" href={`https://api.outscraper.cloud/requests/${result.outscraper_tasks.taskId}`} target="_blank" rel="noreferrer">abrir no Outscraper</a>
+              </div>
+            )}
             <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(result.outscraper_tasks, null, 2)}</pre>
           </div>
         </div>
